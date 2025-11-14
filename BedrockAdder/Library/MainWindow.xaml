@@ -1,0 +1,121 @@
+﻿<Window x:Class="BedrockAdder.Library.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:BedrockAdder"
+        mc:Ignorable="d"
+        Title="BedrockAdder" Height="450" Width="1024" Background="#FF003806" Loaded="Window_Loaded">
+    <Window.Resources>
+        <Style TargetType="ComboBox" x:Key="DarkComboBoxStyle">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="#FF091207"/>
+            <Setter Property="BorderBrush" Value="White"/>
+            <Setter Property="BorderThickness" Value="3"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Padding" Value="4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition />
+                                <ColumnDefinition Width="20"/>
+                            </Grid.ColumnDefinitions>
+                            <ContentPresenter
+                        Grid.Column="0"
+                        Margin="6,3,2,3"
+                        VerticalAlignment="Center"
+                        HorizontalAlignment="Left"
+                        Content="{TemplateBinding SelectionBoxItem}"
+                        ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                        ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                        RecognizesAccessKey="True" />
+                            <ToggleButton
+                        Grid.Column="1"
+                        Name="ToggleButton"
+                        IsChecked="{Binding Path=IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                        Focusable="false"
+                        ClickMode="Press"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="0">
+                                <Path
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Data="M 0 0 L 4 4 L 8 0 Z"
+                            Fill="White"/>
+                            </ToggleButton>
+
+                            <Popup
+                        Name="Popup"
+                        Placement="Bottom"
+                        IsOpen="{TemplateBinding IsDropDownOpen}"
+                        AllowsTransparency="True"
+                        Focusable="False"
+                        PopupAnimation="Slide">
+                                <Grid
+                            MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                            MinWidth="{TemplateBinding ActualWidth}"
+                            Background="#FF091207"
+                            SnapsToDevicePixels="True">
+                                    <Border
+                                BorderThickness="2"
+                                BorderBrush="White"
+                                Background="#FF091207"/>
+                                    <ScrollViewer Margin="4,6,4,6" SnapsToDevicePixels="True">
+                                        <StackPanel IsItemsHost="True"
+                                            KeyboardNavigation.DirectionalNavigation="Contained" />
+                                    </ScrollViewer>
+                                </Grid>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="HasItems" Value="false">
+                                <Setter TargetName="Popup" Property="MinHeight" Value="95"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="false">
+                                <Setter Property="Foreground" Value="Gray"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="true">
+                                <Setter Property="BorderBrush" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+    <Viewbox Stretch="Uniform">
+        <Grid Width="1024" Height="450">
+            <!-- Keep base design size -->
+            <Grid.RowDefinitions>
+                <RowDefinition Height="1*"/>
+                <RowDefinition Height="1*"/>
+                <RowDefinition Height="1*"/>
+                <RowDefinition Height="1*"/>
+                <RowDefinition Height="1*"/>
+                <RowDefinition Height="1*"/>
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1*"/>
+                <ColumnDefinition Width="6*"/>
+                <ColumnDefinition Width="10*"/>
+                <ColumnDefinition Width="15*"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="MinecraftVersionTextBlock" Grid.Column="1" TextWrapping="Wrap" Text="Minecraft Version" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="14" Foreground="White"/>
+            <TextBlock x:Name="ItemsAdderPluginDirTextBlock" Grid.Column="1" Grid.Row="1" TextWrapping="Wrap" Text="ItemsAdder Plugin Folder" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="14" Foreground="White"/>
+            <TextBlock x:Name="GeyserPackFolderTextBlock" Grid.Column="1" Grid.Row="2" TextWrapping="Wrap" Text="Geyser Pack Folder" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="14" Foreground="White"/>
+            <TextBlock x:Name="MappingsFolderTextBlock" Grid.Column="1" Grid.Row="3" TextWrapping="Wrap" Text="Geyser Mappings Folder" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="14" Foreground="White"/>
+            <TextBlock x:Name="LogTextBlock" Grid.Column="3" Grid.Row="0" TextWrapping="Wrap" Text="Conversion Log" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="14" Foreground="White"/>
+            <TextBox x:Name="ItemsAdderPluginFolderTextBox" TextWrapping="Wrap" FontSize="14" TextAlignment="Center" Background="Black" BorderBrush="White" Foreground="White" Grid.Row="1" Grid.Column="2" BorderThickness="3"/>
+            <TextBox x:Name="GeyserPackFolderTextBox" TextWrapping="Wrap" FontSize="14" TextAlignment="Center" Background="Black" BorderBrush="White" Grid.Row="2" Grid.Column="2" BorderThickness="3" Foreground="White"/>
+            <TextBox x:Name="GeyserMappingsFolderTextBox" TextWrapping="Wrap" FontSize="14" TextAlignment="Center" Background="Black" BorderBrush="White" Grid.Row="3" Grid.Column="2" BorderThickness="3" Foreground="White"/>
+            <Button x:Name="ConvertButton" Grid.Column="2" Content="Convert!" Grid.Row="4" FontSize="16" Background="#FF091207" Foreground="White" BorderBrush="White" BorderThickness="3" Click="ConvertButton_Click" IsEnabled="False"/>
+            <RichTextBox x:Name="ConversionLogTextBox" Grid.Column="3" Grid.RowSpan="5" Grid.Row="1" VerticalScrollBarVisibility="Auto" AcceptsReturn="True" IsReadOnly="True" FontFamily="Consolas" Background="Black" Foreground="#FF42FF00" BorderBrush="White" BorderThickness="3">
+                <FlowDocument/>
+            </RichTextBox>
+            <ComboBox x:Name="VersionSelector" Grid.Column="2" HorizontalAlignment="Center" Style="{StaticResource DarkComboBoxStyle}" VerticalAlignment="Center" Width="139" Background="#FF091207" BorderBrush="White" Foreground="White" Height="24" BorderThickness="3,3,3,3"/>
+        </Grid>
+    </Viewbox>
+</Window>
