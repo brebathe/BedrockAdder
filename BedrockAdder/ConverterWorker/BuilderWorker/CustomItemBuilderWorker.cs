@@ -43,6 +43,7 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
                 }
             }
         }
+
         // ---------- core for a single item ----------
 
         public static void BuildOneItem(PackSession session, CustomItem it, IModelIconRenderer renderer, string itemsAdderFolder)
@@ -71,7 +72,7 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
                     selectedVersion = WindowManager.Main?.VersionSelector?.SelectedItem?.ToString() ?? string.Empty;
                 }
                 catch
-                { 
+                {
                     //May decide to handle this in the future
                 }
             });
@@ -88,7 +89,8 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
             if (it.Is3D)
             {
                 // Build the 3D model / geometry & copy model textures.
-                var built = ModelBuilderWorker.Build(it, itemsAdderFolder, renderer);
+                // CHANGED: no renderer for ModelBuilderWorker; icons are handled by ModelImageBuilderWorker instead.
+                var built = ModelBuilderWorker.Build(it, itemsAdderFolder, iconRenderer: null);
 
                 if (built.TexturesToCopy != null)
                 {
@@ -124,21 +126,35 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
                     string iconWorkRoot = Path.Combine(session.PackRoot, "_icons");
                     Directory.CreateDirectory(iconWorkRoot);
 
+                    ConsoleWorker.Write.Line("info", ns + ":" + id + " attempting 3D icon render via ModelImageBuilderWorker.");
                     var icon = ModelImageBuilderWorker.RenderItemIcon(it, iconWorkRoot, renderer);
                     if (icon.Success &&
                         !string.IsNullOrWhiteSpace(icon.IconPngAbs) &&
                         File.Exists(icon.IconPngAbs))
                     {
                         iconSourceAbs = icon.IconPngAbs;
+                        ConsoleWorker.Write.Line("info", ns + ":" + id + " 3D snapshot icon → " + icon.IconPngAbs);
+                    }
+                    else
+                    {
+                        // diagnostic notes if any
+                        if (icon.Notes.Count > 0)
+                        {
+                            foreach (var note in icon.Notes)
+                            {
+                                ConsoleWorker.Write.Line("warn", ns + ":" + id + " icon note: " + note);
+                            }
+                        }
                     }
                 }
 
                 // 2) Fallback: if ModelBuilderWorker already produced an icon, use that.
                 if (string.IsNullOrWhiteSpace(iconSourceAbs) &&
-                    !string.IsNullOrWhiteSpace(built.IconPngAbs) &&
+                    built.IconPngAbs != null &&
                     File.Exists(built.IconPngAbs))
                 {
                     iconSourceAbs = built.IconPngAbs;
+                    ConsoleWorker.Write.Line("info", ns + ":" + id + " fallback icon from ModelBuilderWorker → " + built.IconPngAbs);
                 }
 
                 // 3) Final fallback: use the base texture as a last resort.
@@ -147,6 +163,7 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
                     File.Exists(it.TexturePath))
                 {
                     iconSourceAbs = it.TexturePath;
+                    ConsoleWorker.Write.Line("info", ns + ":" + id + " final fallback icon → " + it.TexturePath);
                 }
             }
             else

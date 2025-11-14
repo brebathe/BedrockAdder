@@ -40,8 +40,10 @@ namespace BedrockAdder.ConverterWorker.ObjectWorker
             string modelPath = it.ModelPath!;
             var textures = BuildTextureMapForItem(it);
 
-            // If the data class already has a flat icon, prefer copying it (fast path)
-            if (!string.IsNullOrWhiteSpace(it.IconPath) && File.Exists(it.IconPath))
+            // IMPORTANT CHANGE:
+            // For 3D items we WANT a rendered snapshot, not a direct copy of IconPath/texture.
+            // So only use the fast-path copy for NON-3D items.
+            if (!it.Is3D && !string.IsNullOrWhiteSpace(it.IconPath) && File.Exists(it.IconPath))
             {
                 return CopyProvidedIcon(it.IconPath!, outputDirAbs, ns, id);
             }

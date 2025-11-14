@@ -1,7 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Threading;
+using System.Drawing;
+using System.Threading.Tasks;
 using CefSharp;
 using CefSharp.OffScreen;
 using BedrockAdder.ConverterWorker.ObjectWorker;
@@ -25,14 +26,16 @@ namespace BedrockAdder.Renderer
             EnsureCefInitialized();
         }
 
-        // PUBLIC ENTRY – COMPLETELY SYNCHRONOUS
+        // Public sync entry – internally runs async logic on a worker thread
         public bool TryRenderIcon(string javaModelPath,
                                   IReadOnlyDictionary<string, string> textureSlotsAbs,
                                   string iconPngAbs)
         {
             try
             {
-                return TryRenderIconInternal(javaModelPath, textureSlotsAbs, iconPngAbs);
+                return Task.Run(() => TryRenderIconInternalAsync(javaModelPath, textureSlotsAbs, iconPngAbs))
+                           .GetAwaiter()
+                           .GetResult();
             }
             catch (Exception ex)
             {
@@ -41,9 +44,9 @@ namespace BedrockAdder.Renderer
             }
         }
 
-        private bool TryRenderIconInternal(string javaModelPath,
-                                           IReadOnlyDictionary<string, string> textureSlotsAbs,
-                                           string iconPngAbs)
+        private async Task<bool> TryRenderIconInternalAsync(string javaModelPath,
+                                                            IReadOnlyDictionary<string, string> textureSlotsAbs,
+                                                            string iconPngAbs)
         {
             if (!File.Exists(_renderHtmlAbs))
             {
@@ -58,7 +61,7 @@ namespace BedrockAdder.Renderer
             }
 
             string modelFullPath = Path.GetFullPath(javaModelPath);
-            ConsoleWorker.Write.Line("debug", "CEF model path resolved to: " + modelFullPath);
+            ConsoleWorker.Write.Line("info", "CEF model path resolved to: " + modelFullPath);
 
             if (!File.Exists(modelFullPath))
             {
@@ -68,8 +71,7 @@ namespace BedrockAdder.Renderer
 
             if (!modelFullPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
             {
-                ConsoleWorker.Write.Line("error", "Model path is not a .json file: " + modelFullPath);
-                // We still continue, but this is almost certainly wrong.
+                ConsoleWorker.Write.Line("warn", "Model path is not a .json file: " + modelFullPath);
             }
 
             // Build texture map for JS (slot -> file:// URL)
@@ -79,7 +81,7 @@ namespace BedrockAdder.Renderer
             foreach (var kv in textureSlotsAbs)
             {
                 string slotName = kv.Key ?? "(null-slot)";
-                string? texPath = kv.Value;
+                string texPath = kv.Value;
 
                 if (!string.IsNullOrWhiteSpace(texPath))
                 {
@@ -88,7 +90,7 @@ namespace BedrockAdder.Renderer
                     {
                         texMap[slotName] = new Uri(fullTexPath).AbsoluteUri;
                         anyTextureExists = true;
-                        ConsoleWorker.Write.Line("debug", "Texture for slot '" + slotName + "': " + fullTexPath);
+                        ConsoleWorker.Write.Line("info", "Texture for slot '" + slotName + "': " + fullTexPath);
                     }
                     else
                     {
@@ -119,44 +121,34 @@ namespace BedrockAdder.Renderer
                 + "&modelPath=" + Uri.EscapeDataString(modelFileUrl)
                 + "&texMap=" + Uri.EscapeDataString(texMapB64);
 
-            ConsoleWorker.Write.Line("debug", "CEF loading URL: " + url);
+            ConsoleWorker.Write.Line("info", "CEF loading URL: " + url);
 
-            using (var browser = new ChromiumWebBrowser())
+            // Construct browser WITH the URL so it starts loading immediately
+            using (var browser = new ChromiumWebBrowser(url))
             {
-                browser.Size = new System.Drawing.Size(_size, _size);
+                browser.Size = new Size(_size, _size);
 
-                var initialLoad = browser.WaitForInitialLoadAsync();
-                browser.BrowserInitialized += (s, e) =>
-                {
-                    ConsoleWorker.Write.Line("debug", "CEF browser initialized, navigating to render.html URL.");
-                    browser.LoadUrl(url);
-                };
-
-                // BLOCK UNTIL INITIAL LOAD COMPLETES
-                var initialResponse = initialLoad.GetAwaiter().GetResult();
+                // Wait for first load of render.html (and its query params)
+                var initialResponse = await browser.WaitForInitialLoadAsync().ConfigureAwait(false);
                 ConsoleWorker.Write.Line(
-                    "debug",
-                    "CEF initial load: success=" + initialResponse.Success
-                    + " httpStatus=" + initialResponse.HttpStatusCode
-                    + " errorCode=" + initialResponse.ErrorCode
+                    "info",
+                    "CEF initial load: success=" + initialResponse.Success +
+                    " httpStatus=" + initialResponse.HttpStatusCode +
+                    " errorCode=" + initialResponse.ErrorCode
                 );
 
-                // Wait for JS/three.js to be "ready" (best-effort)
-                bool ready = WaitForRenderDone(browser, TimeSpan.FromSeconds(12));
+                bool ready = await WaitForRenderDoneAsync(browser, TimeSpan.FromSeconds(12)).ConfigureAwait(false);
                 if (!ready)
                 {
                     ConsoleWorker.Write.Line("warn", "Render timeout or page init flag not detected, capturing anyway.");
                 }
 
-                ConsoleWorker.Write.Line("debug",
-                    "Before screenshot: IsBrowserInitialized=" + browser.IsBrowserInitialized
-                    + " CanExecuteJavascriptInMainFrame=" + browser.CanExecuteJavascriptInMainFrame);
+                ConsoleWorker.Write.Line("info",
+                    "Before screenshot: IsBrowserInitialized=" + browser.IsBrowserInitialized +
+                    " CanExecuteJavascriptInMainFrame=" + browser.CanExecuteJavascriptInMainFrame);
 
-                // SYNCHRONOUS SCREENSHOT
-                var screenshotTask = browser.CaptureScreenshotAsync();
-                screenshotTask.Wait();
-                var screenshot = screenshotTask.Result;
-
+                // Capture screenshot as PNG bytes
+                var screenshot = await browser.CaptureScreenshotAsync().ConfigureAwait(false);
                 if (screenshot == null || screenshot.Length == 0)
                 {
                     ConsoleWorker.Write.Line("error", "CaptureScreenshotAsync returned no data (null or empty buffer).");
@@ -164,6 +156,28 @@ namespace BedrockAdder.Renderer
                 }
 
                 byte[] pngBytes = screenshot;
+
+                // *** FIX: Flip vertically so icons aren't upside down ***
+                try
+                {
+                    using (var msIn = new MemoryStream(pngBytes))
+                    using (var bmp = new Bitmap(msIn))
+                    {
+                        bmp.RotateFlip(RotateFlipType.RotateNoneFlipY);
+
+                        using (var msOut = new MemoryStream())
+                        {
+                            bmp.Save(msOut, System.Drawing.Imaging.ImageFormat.Png);
+                            pngBytes = msOut.ToArray();
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    ConsoleWorker.Write.Line("warn", "Failed to flip icon vertically: " + ex.Message);
+                    // If flip fails, we still fall back to original screenshot bytes.
+                }
+
                 string iconDir = Path.GetDirectoryName(iconPngAbs) ?? AppContext.BaseDirectory;
                 Directory.CreateDirectory(iconDir);
                 File.WriteAllBytes(iconPngAbs, pngBytes);
@@ -194,8 +208,7 @@ namespace BedrockAdder.Renderer
             _cefInit = true;
         }
 
-        // COMPLETELY SYNCHRONOUS "READY" LOOP
-        private static bool WaitForRenderDone(ChromiumWebBrowser browser, TimeSpan timeout)
+        private static async Task<bool> WaitForRenderDoneAsync(ChromiumWebBrowser browser, TimeSpan timeout)
         {
             var start = DateTime.UtcNow;
 
@@ -203,34 +216,32 @@ namespace BedrockAdder.Renderer
             {
                 if (!browser.IsBrowserInitialized || browser.GetBrowser() == null)
                 {
-                    Thread.Sleep(50);
+                    await Task.Delay(50).ConfigureAwait(false);
                     continue;
                 }
 
                 if (!browser.CanExecuteJavascriptInMainFrame)
                 {
-                    Thread.Sleep(50);
+                    await Task.Delay(50).ConfigureAwait(false);
                     continue;
                 }
 
-                // window.renderDone is optional; we also accept document.readyState === 'complete'
-                string js = "(function() {" +
-                            "  if (window.renderDone === true) return true;" +
-                            "  if (document && document.readyState === 'complete') return true;" +
-                            "  return false;" +
-                            "})()";
+                const string script = @"
+                    (function() {
+                        if (window.renderDone === true) return true;
+                        if (document && document.readyState === 'complete') return true;
+                        return false;
+                    })()
+                ";
 
-                var evalTask = browser.EvaluateScriptAsync(js);
-                evalTask.Wait();
-                var resp = evalTask.Result;
-
-                if (resp != null && resp.Success && resp.Result is bool b && b)
+                var resp = await browser.EvaluateScriptAsync(script).ConfigureAwait(false);
+                if (resp?.Success == true && resp.Result is bool b && b)
                 {
-                    ConsoleWorker.Write.Line("debug", "CEF page reported renderDone/readyState complete.");
+                    ConsoleWorker.Write.Line("info", "CEF page reported renderDone/readyState complete.");
                     return true;
                 }
 
-                Thread.Sleep(50);
+                await Task.Delay(50).ConfigureAwait(false);
             }
 
             return false;

@@ -85,6 +85,23 @@ namespace BedrockAdder.ExtractorWorker.ConverterWorker
                                 "Layer mapping " + armorNamespaceFromFile + ":" + equipmentId +
                                 " layer_2 → " + legsAbs + " (exists=" + legsExists + ")"
                             );
+
+                            // TEXTURE MANDATORY: missing layer textures are errors, not just soft warnings
+                            if (layerChestRel != null && !chestExists)
+                            {
+                                ConsoleWorker.Write.Line(
+                                    "error",
+                                    "Armor layer_1 texture missing for " + armorNamespaceFromFile + ":" + equipmentId + " → " + chestAbs
+                                );
+                            }
+
+                            if (layerLegsRel != null && !legsExists)
+                            {
+                                ConsoleWorker.Write.Line(
+                                    "error",
+                                    "Armor layer_2 texture missing for " + armorNamespaceFromFile + ":" + equipmentId + " → " + legsAbs
+                                );
+                            }
                         }
                     }
                     else
@@ -149,6 +166,31 @@ namespace BedrockAdder.ExtractorWorker.ConverterWorker
                                 "Guessed layers for " + armorNamespace + ":" + armorId +
                                 " layer_1=" + armorLayerChestRel + " layer_2=" + armorLayerLegsRel
                             );
+
+                            // TEXTURE MANDATORY for guessed layers as well
+                            if (!string.IsNullOrWhiteSpace(armorLayerChestRel))
+                            {
+                                string chestAbsGuess = ArmorYamlParserWorker.BuildItemsAdderContentTexturePath(itemsAdderRootPath, armorNamespace, armorLayerChestRel);
+                                if (!File.Exists(chestAbsGuess))
+                                {
+                                    ConsoleWorker.Write.Line(
+                                        "error",
+                                        "Armor guessed layer_1 texture missing for " + armorNamespace + ":" + armorId + " → " + chestAbsGuess
+                                    );
+                                }
+                            }
+
+                            if (!string.IsNullOrWhiteSpace(armorLayerLegsRel))
+                            {
+                                string legsAbsGuess = ArmorYamlParserWorker.BuildItemsAdderContentTexturePath(itemsAdderRootPath, armorNamespace, armorLayerLegsRel);
+                                if (!File.Exists(legsAbsGuess))
+                                {
+                                    ConsoleWorker.Write.Line(
+                                        "error",
+                                        "Armor guessed layer_2 texture missing for " + armorNamespace + ":" + armorId + " → " + legsAbsGuess
+                                    );
+                                }
+                            }
                         }
 
                         // Held / GUI icon (2D) from YAML (graphics.texture preferred)
@@ -201,7 +243,7 @@ namespace BedrockAdder.ExtractorWorker.ConverterWorker
                             Slot = armorSlot,
                             Material = armorMaterial,
 
-                            // GUI / Held 2D
+                            // GUI / Held 2D (optional override)
                             TexturePath = string.Empty,
                             IconPath = null,
 
@@ -224,7 +266,9 @@ namespace BedrockAdder.ExtractorWorker.ConverterWorker
                             }
                             else
                             {
-                                ConsoleWorker.Write.Line("warn", armorNamespace + ":" + armorId + " armor icon not found: " + heldIconTexturePath);
+                                // Icons are optional; do NOT treat missing icon as a warning/error.
+                                // Many armors legitimately use vanilla icons that won't exist in the IA content pack.
+                                ConsoleWorker.Write.Line("debug", armorNamespace + ":" + armorId + " armor icon not resolved in content pack: " + heldIconTexturePath);
                             }
                         }
 
