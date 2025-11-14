@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using CefSharp;
 using CefSharp.OffScreen;
 using CefSharp.DevTools.Page;
+using ScreenshotImageFormat = CefSharp.DevTools.Page.ScreenshotImageFormat;
 using BedrockAdder.ConverterWorker.ObjectWorker;
 
 namespace BedrockAdder.Renderer
@@ -104,7 +105,7 @@ namespace BedrockAdder.Renderer
                     return false;
                 }
 
-                var screenshot = await browser.CaptureScreenshotAsync(ignoreExistingScreenshot: true, format: CefSharp.DevTools.Page.ScreenshotImageFormat.Png).ConfigureAwait(false);
+                var screenshot = await browser.CaptureScreenshotAsync(ignoreExistingScreenshot: true, format: ScreenshotImageFormat.Png).ConfigureAwait(false);
                 if (screenshot == null || string.IsNullOrWhiteSpace(screenshot.Data))
                 {
                     ConsoleWorker.Write.Line("warn", "CaptureScreenshotAsync returned no data.");
@@ -123,7 +124,7 @@ namespace BedrockAdder.Renderer
                 }
 
                 Directory.CreateDirectory(Path.GetDirectoryName(iconPngAbs) ?? AppContext.BaseDirectory);
-                await File.WriteAllBytesAsync(iconPngAbs, pngBytes).ConfigureAwait(false);
+                File.WriteAllBytes(iconPngAbs, pngBytes);
 
                 ConsoleWorker.Write.Line("info", "Cef render → " + iconPngAbs);
                 return File.Exists(iconPngAbs);
