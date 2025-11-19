@@ -2,11 +2,9 @@
 using BedrockAdder.Library;
 using BedrockAdder.Managers;
 using BedrockAdder.Renderer;                       // CefOffscreenIconRenderer
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.IO;
-using YamlDotNet.Core.Tokens;
 
 namespace BedrockAdder.ConverterWorker.BuilderWorker
 {
@@ -46,6 +44,7 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
 
         public static void BuildOneBlock(PackSession session, CustomBlock block, IModelIconRenderer renderer)
         {
+            BedrockManager.EnsureDir(Path.Combine(session.PackRoot, "textures", "blocks"));
             if (block == null)
             {
                 ConsoleWorker.Write.Line("warn", "BuildOneBlock: block is null");
@@ -55,11 +54,13 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
             string ns = string.IsNullOrWhiteSpace(block.BlockNamespace) ? "unknown" : block.BlockNamespace;
             string id = string.IsNullOrWhiteSpace(block.BlockItemID) ? "unknown" : block.BlockItemID;
 
-            string bedrockId = BedrockManager.MakeBedrockItemId(ns, id);
-            string atlasKey = "ia_block_" + Sanitize(ns) + "_" + Sanitize(id);
+            // Bedrock identifier + atlas key + icon path
+            string bedrockId = BedrockManager.MakeBedrockItemId(ns, id);                 // ia:ns_id
+            string atlasKey = "ia_block_" + Sanitize(ns) + "_" + Sanitize(id);           // key inside item_texture.json
             string iconAtlasRel = "textures/items/" + Sanitize(ns) + "/" + Sanitize(id) + ".png";
             string iconAbs = Path.Combine(session.PackRoot, iconAtlasRel.Replace('/', Path.DirectorySeparatorChar));
 
+            // Ensure base dirs
             BedrockManager.EnsureDir(Path.Combine(session.PackRoot, "items"));
             BedrockManager.EnsureDir(Path.Combine(session.PackRoot, "attachables"));
             BedrockManager.EnsureDir(Path.Combine(session.PackRoot, "models", "entity"));
@@ -69,7 +70,6 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
             string? iconSourceAbs = null;
 
             // ---------- 3D GEOMETRY / MODEL TEXTURES (for 3D blocks) ----------
-
             if (block.Is3D && !string.IsNullOrWhiteSpace(block.ModelPath) && File.Exists(block.ModelPath))
             {
                 var built = ModelBuilderWorker.Build(block, iconRenderer: null);
@@ -82,28 +82,62 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
                     if (!string.IsNullOrWhiteSpace(geoDir))
                         Directory.CreateDirectory(geoDir);
 
-                    File.WriteAllText(geoAbs, built.GeometryJson);
-                    ConsoleWorker.Write.Line("info", ns + ":" + id + " wrote geometry " + built.GeometryOutRel);
-                }
-
-                // 2) Copy textures used by the 3D model
-                foreach (var (srcAbs, dstRel) in built.TextureCopies)
-                {
-                    var fromAbs = srcAbs;
-                    var toRel = dstRel;
-                    // Build absolute output path from relative
-                    var toAbs = Path.Combine(session.PackRoot, toRel.Replace('/', Path.DirectorySeparatorChar));
-                    string? toDir = Path.GetDirectoryName(toAbs);
-                    if (!string.IsNullOrWhiteSpace(toDir))
-                        Directory.CreateDirectory(toDir);
                     try
                     {
-                        File.Copy(fromAbs, toAbs, true);
-                        ConsoleWorker.Write.Line("info", ns + ":" + id + " copied texture " + fromAbs + " → " + toRel);
+                        File.WriteAllText(geoAbs, built.GeometryJson, System.Text.Encoding.UTF8);
+                        ConsoleWorker.Write.Line("info", ns + ":" + id + " wrote geometry " + built.GeometryOutRel);
                     }
                     catch (Exception ex)
                     {
-                        ConsoleWorker.Write.Line("warn", ns + ":" + id + " failed copying texture " + fromAbs + " → " + toRel + " ex=" + ex.Message);
+                        ConsoleWorker.Write.Line("warn", ns + ":" + id + " failed writing geometry: " + geoAbs + " ex=" + ex.Message);
+                    }
+                }
+
+                // 2) Write attachable (.json) if present – same idea as for items
+                if (!string.IsNullOrWhiteSpace(built.AttachableJson))
+                {
+                    string attAbs = Path.Combine(session.PackRoot, built.AttachableOutRel.Replace('/', Path.DirectorySeparatorChar));
+                    string? attDir = Path.GetDirectoryName(attAbs);
+                    if (!string.IsNullOrWhiteSpace(attDir))
+                        Directory.CreateDirectory(attDir);
+
+                    try
+                    {
+                        File.WriteAllText(attAbs, built.AttachableJson, System.Text.Encoding.UTF8);
+                        ConsoleWorker.Write.Line("info", ns + ":" + id + " wrote attachable " + built.AttachableOutRel);
+                    }
+                    catch (Exception ex)
+                    {
+                        ConsoleWorker.Write.Line("warn", ns + ":" + id + " failed writing attachable: " + attAbs + " ex=" + ex.Message);
+                    }
+                }
+                else
+                {
+                    ConsoleWorker.Write.Line("warn", ns + ":" + id + " has no AttachableJson produced by ModelBuilderWorker.");
+                }
+
+                // 3) Copy textures used by the 3D model
+                if (built.TexturesToCopy != null)
+                {
+                    foreach (var (srcAbs, dstRel) in built.TexturesToCopy)
+                    {
+                        if (string.IsNullOrWhiteSpace(srcAbs) || string.IsNullOrWhiteSpace(dstRel))
+                            continue;
+
+                        string toAbs = Path.Combine(session.PackRoot, dstRel.Replace('/', Path.DirectorySeparatorChar));
+                        string? toDir = Path.GetDirectoryName(toAbs);
+                        if (!string.IsNullOrWhiteSpace(toDir))
+                            Directory.CreateDirectory(toDir);
+
+                        try
+                        {
+                            File.Copy(srcAbs, toAbs, true);
+                            ConsoleWorker.Write.Line("info", ns + ":" + id + " copied texture " + srcAbs + " → " + dstRel);
+                        }
+                        catch (Exception ex)
+                        {
+                            ConsoleWorker.Write.Line("warn", ns + ":" + id + " failed copying texture " + srcAbs + " → " + dstRel + " ex=" + ex.Message);
+                        }
                     }
                 }
 
@@ -153,8 +187,13 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
                 }
             }
 
-            // ---------- CUBE ICON RENDER (for non-3D cuboid blocks) ----------
+            // ---------- BASE TEXTURES FOR CUBOID BLOCKS (non-3D) ----------
+            if (!block.Is3D)
+            {
+                CopyCuboidBlockTextures(session, block, ns, id);
+            }
 
+            // ---------- CUBE ICON RENDER (for non-3D cuboid blocks) ----------
             if (iconSourceAbs == null && !block.Is3D)
             {
                 string cubeModelPath = Path.Combine(AppContext.BaseDirectory, "Library", "example_cuboid.json");
@@ -245,8 +284,6 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
 
             // ---------- COPY ICON INTO PACK ----------
 
-            // ---------- COPY ICON INTO PACK ----------
-
             if (!string.IsNullOrWhiteSpace(iconSourceAbs) && File.Exists(iconSourceAbs))
             {
                 string? iconDir = Path.GetDirectoryName(iconAbs);
@@ -290,7 +327,7 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
                 {
                     atlasRoot = new JObject
                     {
-                        ["resource_pack_name"] = "BedrockAdder",
+                        ["resource_pack_name"] = session.PackName ?? "BedrockAdder",
                         ["texture_name"] = "atlas.items",
                         ["texture_data"] = new JObject()
                     };
@@ -302,13 +339,13 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
                     atlasRoot["texture_data"] = texData;
                 }
 
-                var entry = new JObject
+                // Bedrock happily accepts a string here; stay consistent with item builder.
+                texData[atlasKey] = new JObject
                 {
-                    ["textures"] = new JArray(iconAtlasRel)
+                    ["textures"] = BedrockManager.NormalizeAtlasPath(iconAtlasRel)
                 };
-                texData[atlasKey] = entry;
 
-                File.WriteAllText(atlasPath, atlasRoot.ToString(Formatting.Indented));
+                File.WriteAllText(atlasPath, atlasRoot.ToString(Newtonsoft.Json.Formatting.Indented));
                 ConsoleWorker.Write.Line(
                     "info",
                     ns + ":" + id + " item_texture.json → " + atlasKey + " = " + iconAtlasRel);
@@ -319,6 +356,41 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
                     "warn",
                     ns + ":" + id + " failed updating item_texture.json: " + ex.Message);
             }
+
+            // ---------- MINIMAL ITEM DEFINITION (so the block exists as a Bedrock item) ----------
+
+            WriteItemDefinition(session, bedrockId, atlasKey);
+        }
+
+        // ---------- helpers ----------
+
+        private static void WriteItemDefinition(PackSession session, string bedrockId, string atlasKey)
+        {
+            // Same format as CustomItemBuilderWorker, but re-usable for blocks
+            string safeName = bedrockId.Replace(':', '_'); // ia_ns_id
+            string itemJsonRel = Path.Combine("items", safeName + ".json");
+            string itemJsonAbs = Path.Combine(session.PackRoot, itemJsonRel);
+
+            Directory.CreateDirectory(Path.GetDirectoryName(itemJsonAbs)!);
+
+            var item = new JObject
+            {
+                ["format_version"] = "1.20.0",
+                ["minecraft:item"] = new JObject
+                {
+                    ["description"] = new JObject
+                    {
+                        ["identifier"] = bedrockId
+                    },
+                    ["components"] = new JObject
+                    {
+                        ["minecraft:icon"] = new JObject { ["texture"] = atlasKey }
+                    }
+                }
+            };
+
+            File.WriteAllText(itemJsonAbs, item.ToString(Newtonsoft.Json.Formatting.Indented));
+            ConsoleWorker.Write.Line("info", "Wrote block item json → " + itemJsonRel + " (id=" + bedrockId + ")");
         }
 
         private static string Sanitize(string s)
@@ -334,5 +406,101 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
             }
             return sb.ToString();
         }
+        /// <summary>
+        /// For non-3D cuboid blocks, copy their base textures into the Bedrock pack
+        /// so future block models / terrain_texture.json can reference them.
+        /// </summary>
+        private static void CopyCuboidBlockTextures(PackSession session, CustomBlock block, string ns, string id)
+        {
+            // Only makes sense for non-3D blocks that actually have textures
+            if (block == null || block.Is3D)
+                return;
+
+            string nsSafe = Sanitize(ns);
+            string idSafe = Sanitize(id);
+
+            // textures/blocks/{ns}/...
+            string blocksRoot = Path.Combine(session.PackRoot, "textures", "blocks", nsSafe);
+            try
+            {
+                Directory.CreateDirectory(blocksRoot);
+            }
+            catch (Exception ex)
+            {
+                ConsoleWorker.Write.Line("warn", nsSafe + ":" + idSafe + " failed creating blocks texture dir: " + blocksRoot + " ex=" + ex.Message);
+                return;
+            }
+
+            // ---- Per-face textures (graphics.textures: up/down/north/south/east/west) ----
+            if (block.PerFaceTexture &&
+                block.FaceTexturePaths != null &&
+                block.FaceTexturePaths.Count > 0)
+            {
+                foreach (var kv in block.FaceTexturePaths)
+                {
+                    string faceKey = kv.Key;
+                    string srcAbs = kv.Value;
+
+                    if (string.IsNullOrWhiteSpace(faceKey))
+                        continue;
+                    if (string.IsNullOrWhiteSpace(srcAbs) || !File.Exists(srcAbs))
+                        continue;
+
+                    // Normalize face: "Up" / "UP" → "up"
+                    faceKey = faceKey.Trim().ToLowerInvariant(); // up, down, north, south, east, west
+
+                    string fileName = idSafe + "_" + faceKey + ".png";  // e.g. my_block_up.png
+                    string dstAbs = Path.Combine(blocksRoot, fileName);
+
+                    try
+                    {
+                        File.Copy(srcAbs, dstAbs, true);
+                        ConsoleWorker.Write.Line(
+                            "info",
+                            nsSafe + ":" + idSafe + " copied face texture " + faceKey + " " + srcAbs + " → textures/blocks/" + nsSafe + "/" + fileName);
+                    }
+                    catch (Exception ex)
+                    {
+                        ConsoleWorker.Write.Line(
+                            "warn",
+                            nsSafe + ":" + idSafe + " failed copying face texture " + faceKey + " " + srcAbs +
+                            " → " + dstAbs + " ex=" + ex.Message);
+                    }
+                }
+
+                return; // per-face variant handled; no need for single-texture fallback
+            }
+
+            // ---- Single shared texture (graphics.texture or inferred from model) ----
+            if (!string.IsNullOrWhiteSpace(block.TexturePath) &&
+                File.Exists(block.TexturePath))
+            {
+                string fileName = idSafe + ".png"; // e.g. my_block.png
+                string dstAbs = Path.Combine(blocksRoot, fileName);
+
+                try
+                {
+                    File.Copy(block.TexturePath, dstAbs, true);
+                    ConsoleWorker.Write.Line(
+                        "info",
+                        nsSafe + ":" + idSafe + " copied block texture " + block.TexturePath +
+                        " → textures/blocks/" + nsSafe + "/" + fileName);
+                }
+                catch (Exception ex)
+                {
+                    ConsoleWorker.Write.Line(
+                        "warn",
+                        nsSafe + ":" + idSafe + " failed copying block texture " + block.TexturePath +
+                        " → " + dstAbs + " ex=" + ex.Message);
+                }
+            }
+            else
+            {
+                ConsoleWorker.Write.Line(
+                    "warn",
+                    nsSafe + ":" + idSafe + " has no TexturePath to copy for cuboid block.");
+            }
+        }
+
     }
 }
