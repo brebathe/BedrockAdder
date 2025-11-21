@@ -2,6 +2,7 @@
 using BedrockAdder.Library;
 using BedrockAdder.Managers;
 using BedrockAdder.Renderer;                       // CefOffscreenIconRenderer
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.IO;
@@ -39,6 +40,14 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
                 {
                     ConsoleWorker.Write.Line("error", "BuildOneBlock (block) failed: " + ex.Message);
                 }
+            }
+            try
+            {
+                BuildTerrainAtlas(session);
+            }
+            catch (Exception ex)
+            {
+                ConsoleWorker.Write.Line("warn", "BuildTerrainAtlas failed: " + ex.Message);
             }
         }
 
@@ -502,5 +511,96 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
             }
         }
 
+        /// <summary>
+        /// Build or update textures/terrain_texture.json for all custom blocks.
+        /// We only register entries for cuboid (non-3D) blocks here, since 3D blocks
+        /// use models/entity geometries with their own textures.
+        /// </summary>
+        private static void BuildTerrainAtlas(PackSession session)
+        {
+            string atlasPath = Path.Combine(session.PackRoot, "textures", "terrain_texture.json");
+            JObject root;
+
+            if (File.Exists(atlasPath))
+            {
+                try
+                {
+                    root = JObject.Parse(File.ReadAllText(atlasPath));
+                }
+                catch
+                {
+                    root = new JObject();
+                }
+            }
+            else
+            {
+                root = new JObject
+                {
+                    ["resource_pack_name"] = session.PackName ?? "BedrockAdder",
+                    ["texture_name"] = "atlas.terrain",
+                    ["padding"] = 8,
+                    ["num_mip_levels"] = 4,
+                    ["texture_data"] = new JObject()
+                };
+            }
+
+            if (root["texture_data"] is not JObject data)
+            {
+                data = new JObject();
+                root["texture_data"] = data;
+            }
+
+            // For each custom block, register its block textures into the terrain atlas.
+            foreach (CustomBlock block in Lists.CustomBlocks)
+            {
+                if (block == null) continue;
+
+                string ns = string.IsNullOrWhiteSpace(block.BlockNamespace) ? "unknown" : block.BlockNamespace;
+                string id = string.IsNullOrWhiteSpace(block.BlockItemID) ? "unknown" : block.BlockItemID;
+                string nsSafe = Sanitize(ns);
+                string idSafe = Sanitize(id);
+
+                // Skip 3D blocks for now; their visuals are handled via entity geometry.
+                if (block.Is3D)
+                    continue;
+
+                // Per-face textures: up/down/north/south/east/west
+                if (block.PerFaceTexture && block.FaceTexturePaths != null && block.FaceTexturePaths.Count > 0)
+                {
+                    foreach (var kv in block.FaceTexturePaths)
+                    {
+                        if (string.IsNullOrWhiteSpace(kv.Key))
+                            continue;
+                        string faceKey = kv.Key.Trim().ToLowerInvariant();
+                        if (string.IsNullOrWhiteSpace(faceKey))
+                            continue;
+
+                        // textures/blocks/{ns}/{id}_{face}.png
+                        string atlasKey = "ia_block_" + nsSafe + "_" + idSafe + "_" + faceKey;
+                        string relPath = "textures/blocks/" + nsSafe + "/" + idSafe + "_" + faceKey + ".png";
+                        string texPath = BedrockManager.NormalizeAtlasPath(relPath);
+
+                        data[atlasKey] = new JObject
+                        {
+                            ["textures"] = texPath
+                        };
+                    }
+                }
+                else
+                {
+                    // Single-texture cuboid block: textures/blocks/{ns}/{id}.png
+                    string atlasKey = "ia_block_" + nsSafe + "_" + idSafe;
+                    string relPath = "textures/blocks/" + nsSafe + "/" + idSafe + ".png";
+                    string texPath = BedrockManager.NormalizeAtlasPath(relPath);
+
+                    data[atlasKey] = new JObject
+                    {
+                        ["textures"] = texPath
+                    };
+                }
+            }
+            File.WriteAllText(atlasPath, root.ToString(Formatting.Indented), System.Text.Encoding.UTF8);
+            ConsoleWorker.Write.Line("info", "Updated terrain_texture.json for custom blocks.");
+        }
     }
 }

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.Threading.Tasks;
 using CefSharp;
 using CefSharp.OffScreen;
@@ -71,7 +72,7 @@ namespace BedrockAdder.Renderer
                 ConsoleWorker.Write.Line("warn", "Model path is not a .json file: " + modelFullPath);
             }
 
-            // --- NEW: read the model JSON and send it inline as base64 ---
+            // --- Read the model JSON and send it inline as base64 ---
             string modelJson;
             try
             {
@@ -85,13 +86,52 @@ namespace BedrockAdder.Renderer
 
             string modelJsonB64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(modelJson));
 
+            // -------------------------------------------------------
+            // Decide if this looks like a cuboid-style block model
+            // (i.e., has the classic 6 face slots: north/south/east/west/up/down).
+            // We will only rotate textures for these, so items remain untouched.
+            // -------------------------------------------------------
+            var normalizedSlots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var kv in textureSlotsAbs)
+            {
+                string key = kv.Key ?? string.Empty;
+                if (key.StartsWith("#"))
+                {
+                    key = key.Substring(1);
+                }
+
+                if (!string.IsNullOrWhiteSpace(key))
+                {
+                    normalizedSlots.Add(key);
+                }
+            }
+
+            bool looksLikeCuboid =
+                normalizedSlots.Contains("north") &&
+                normalizedSlots.Contains("south") &&
+                normalizedSlots.Contains("east") &&
+                normalizedSlots.Contains("west");
+            // (up/down not strictly required, but usually present)
+
+            if (looksLikeCuboid)
+            {
+                ConsoleWorker.Write.Line("info", "Model detected as cuboid-like (has north/south/east/west slots). North texture will be rotated 180° for icon render.");
+            }
+
             // Build texture map for JS (slot -> file:// URL)
             var texMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             bool anyTextureExists = false;
 
             foreach (var kv in textureSlotsAbs)
             {
-                string slotName = kv.Key ?? "(null-slot)";
+                string rawSlotName = kv.Key ?? "(null-slot)";
+                string slotName = rawSlotName;
+
+                if (slotName.StartsWith("#"))
+                {
+                    slotName = slotName.Substring(1);
+                }
+
                 string texPath = kv.Value;
 
                 if (!string.IsNullOrWhiteSpace(texPath))
@@ -99,9 +139,26 @@ namespace BedrockAdder.Renderer
                     string fullTexPath = Path.GetFullPath(texPath);
                     if (File.Exists(fullTexPath))
                     {
-                        texMap[slotName] = new Uri(fullTexPath).AbsoluteUri;
+                        string pathForRenderer = fullTexPath;
+
+                        // For cuboid-like models, rotate the NORTH face texture 180° for icon rendering.
+                        if (looksLikeCuboid && slotName.Equals("north", StringComparison.OrdinalIgnoreCase))
+                        {
+                            try
+                            {
+                                pathForRenderer = CreateRotatedTextureCopy(fullTexPath, 180, "north180");
+                                ConsoleWorker.Write.Line("info", "Rotated north texture 180° for icon: " + pathForRenderer);
+                            }
+                            catch (Exception ex)
+                            {
+                                ConsoleWorker.Write.Line("warn", "Failed to rotate north texture '" + fullTexPath + "': " + ex.Message + " – falling back to original.");
+                                pathForRenderer = fullTexPath;
+                            }
+                        }
+
+                        texMap[slotName] = new Uri(pathForRenderer).AbsoluteUri;
                         anyTextureExists = true;
-                        ConsoleWorker.Write.Line("info", "Texture for slot '" + slotName + "': " + fullTexPath);
+                        ConsoleWorker.Write.Line("info", "Texture for slot '" + slotName + "': " + pathForRenderer);
                     }
                     else
                     {
@@ -196,6 +253,61 @@ namespace BedrockAdder.Renderer
                     return false;
                 }
             }
+        }
+
+        /// <summary>
+        /// Creates a rotated copy (in %TEMP%/BedrockAdderIconTex) of the source texture.
+        /// Returns the absolute path of the rotated PNG.
+        /// </summary>
+        private static string CreateRotatedTextureCopy(string srcPath, int degrees, string suffix)
+        {
+            string tempRoot = Path.Combine(Path.GetTempPath(), "BedrockAdderIconTex");
+            Directory.CreateDirectory(tempRoot);
+
+            string baseName = Path.GetFileNameWithoutExtension(srcPath);
+            string fileName = baseName + "_" + suffix + ".png";
+            string destPath = Path.Combine(tempRoot, fileName);
+
+            // If the rotated copy already exists and is newer than source, reuse it.
+            if (File.Exists(destPath))
+            {
+                DateTime srcTime = File.GetLastWriteTimeUtc(srcPath);
+                DateTime dstTime = File.GetLastWriteTimeUtc(destPath);
+                if (dstTime >= srcTime)
+                {
+                    return destPath;
+                }
+            }
+
+            using (var bmp = new Bitmap(srcPath))
+            {
+                RotateFlipType rotateFlipType = RotateFlipType.RotateNoneFlipNone;
+                int normalized = ((degrees % 360) + 360) % 360;
+                switch (normalized)
+                {
+                    case 90:
+                        rotateFlipType = RotateFlipType.Rotate90FlipNone;
+                        break;
+                    case 180:
+                        rotateFlipType = RotateFlipType.Rotate180FlipNone;
+                        break;
+                    case 270:
+                        rotateFlipType = RotateFlipType.Rotate270FlipNone;
+                        break;
+                    default:
+                        rotateFlipType = RotateFlipType.RotateNoneFlipNone;
+                        break;
+                }
+
+                if (rotateFlipType != RotateFlipType.RotateNoneFlipNone)
+                {
+                    bmp.RotateFlip(rotateFlipType);
+                }
+
+                bmp.Save(destPath, ImageFormat.Png);
+            }
+
+            return destPath;
         }
 
         private static void EnsureCefInitialized()
