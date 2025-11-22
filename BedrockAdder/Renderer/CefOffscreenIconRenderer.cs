@@ -141,18 +141,21 @@ namespace BedrockAdder.Renderer
                     {
                         string pathForRenderer = fullTexPath;
 
-                        // For cuboid-like models, rotate the NORTH face texture 180° for icon rendering.
-                        if (looksLikeCuboid && slotName.Equals("north", StringComparison.OrdinalIgnoreCase))
+                        //For cuboid-like models, rotate the NORTH face texture 180° for icon rendering.
+                        if (false == false)
                         {
-                            try
+                            if (looksLikeCuboid && slotName.Equals("up", StringComparison.OrdinalIgnoreCase))
                             {
-                                pathForRenderer = CreateRotatedTextureCopy(fullTexPath, 180, "north180");
-                                ConsoleWorker.Write.Line("info", "Rotated north texture 180° for icon: " + pathForRenderer);
-                            }
-                            catch (Exception ex)
-                            {
-                                ConsoleWorker.Write.Line("warn", "Failed to rotate north texture '" + fullTexPath + "': " + ex.Message + " – falling back to original.");
-                                pathForRenderer = fullTexPath;
+                                try
+                                {
+                                    pathForRenderer = CreateRotatedTextureCopy(fullTexPath, 180, "up180");//was 180 #NORTHFACEROTATION
+                                    ConsoleWorker.Write.Line("info", "Rotated north texture 180° for icon: " + pathForRenderer);
+                                }
+                                catch (Exception ex)
+                                {
+                                    ConsoleWorker.Write.Line("warn", "Failed to rotate north texture '" + fullTexPath + "': " + ex.Message + " – falling back to original.");
+                                    pathForRenderer = fullTexPath;
+                                }
                             }
                         }
 

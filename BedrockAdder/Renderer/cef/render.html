@@ -122,19 +122,22 @@
         return result;
         }
 
+        // Build box geometry for an element, plus its world-space center
         function boxGeomFromElement(el) {
         const f = el.from, t = el.to;
         const w = (t[0] - f[0]);
         const h = (t[1] - f[1]);
         const d = (t[2] - f[2]);
+
+        // BoxGeometry centered at (0,0,0) in local space
         const geom = new THREE.BoxGeometry(w, h, d);
 
-        // Center the element in [-8, +8] on all axes (MC-style)
+        // World-space center in Minecraft's 0..16 coordinates mapped to [-8, +8]
         const cx = (f[0] + t[0]) / 2 - 8;
         const cy = (f[1] + t[1]) / 2 - 8;
         const cz = (f[2] + t[2]) / 2 - 8;
-        geom.translate(cx, cy, cz);
-        return geom;
+
+        return { geom, cx, cy, cz };
         }
 
         function faceNameOrder() {
@@ -144,21 +147,43 @@
         // Flag to distinguish atlas-based models (3D items) vs cuboid blocks
         let modelHasTextureAtlas = false;
 
+        // ---------------------------------------------------------
+        // NEW: map Minecraft face name -> BoxGeometry face index
+        // BoxGeometry builds faces in this order: +X, -X, +Y, -Y, +Z, -Z
+        // We map that to east, west, up, down, south, north.
+        // ---------------------------------------------------------
+        const FACE_INDEX_BY_NAME = {
+        east: 0,   // +X
+        west: 1,   // -X
+        up:   2,   // +Y
+        down: 3,   // -Y
+        south:4,   // +Z
+        north:5    // -Z
+        };
+
         // Apply UVs / flips:
-        // - For atlas models: use face.uv, and flip V on side faces.
-        // - For non-atlas cuboids: rely on BoxGeometry defaults, with a simple V-flip on side faces.
+        // - For atlas models: use face.uv to overwrite the box face rect.
+        // - For non-atlas cuboids: rely on BoxGeometry defaults, only flip V on side faces.
         function applyFaceUVs(geom, group, face, texture, faceName) {
-        if (!geom || !group) return;
+        if (!geom) return;
         const uvAttr = geom.attributes.uv;
         if (!uvAttr) return;
 
-        // Non-atlas case: flip existing V for side faces only
+        // Which face of the box are we addressing?
+        const faceIndex = FACE_INDEX_BY_NAME[faceName];
+        if (faceIndex === undefined) return;
+
+        const vertsPerFace = 4;
+        const compsPerVert = 2;
+        const base = faceIndex * vertsPerFace * compsPerVert; // 0,8,16,...
+
+        // --- Non-atlas case: just flip existing V for side faces ---
         if (!modelHasTextureAtlas) {
-        if (faceName === "north" || faceName === "south" || faceName === "east" || faceName === "west") {
-        const start = group.start * 2;
-        // 6 vertices per face, 2 components per vertex → 12 floats
-        for (let i = 0; i < 6; i++) {
-        const vIndex = start + i * 2 + 1; // +1 = V component
+        if (faceName === "north" || faceName === "south" ||
+        faceName === "east"  || faceName === "west") {
+
+        for (let v = 0; v < vertsPerFace; v++) {
+        const vIndex = base + v * compsPerVert + 1; // +1 = V component
         if (vIndex < uvAttr.array.length) {
         uvAttr.array[vIndex] = 1.0 - uvAttr.array[vIndex];
         }
@@ -168,11 +193,11 @@
         return;
         }
 
-        // Atlas-based model (3D item / example cuboid using atlas)
+        // --- Atlas-based (or explicit UV-based) case ---
         if (!face || !face.uv || face.uv.length < 4) return;
 
         const tex = texture || null;
-        const texW = tex && tex.image && tex.image.width ? tex.image.width : 16;
+        const texW = tex && tex.image && tex.image.width  ? tex.image.width  : 16;
         const texH = tex && tex.image && tex.image.height ? tex.image.height : 16;
 
         const uv = face.uv;
@@ -181,27 +206,27 @@
         let u2 = uv[2] / texW;
         let v2 = uv[3] / texH;
 
-        // Flip V on side faces
-        if (faceName === "north" || faceName === "south" || faceName === "east" || faceName === "west") {
-        const tmp = v1;
-        v1 = v2;
-        v2 = tmp;
-        }
+        // If you later need a V-flip for side faces, you can re-enable this:
+        // if (faceName === "north" || faceName === "south" ||
+        //     faceName === "east"  || faceName === "west") {
+        //     const tmp = v1;
+        //     v1 = v2;
+        //     v2 = tmp;
+        // }
 
-        const start = group.start * 2;
-        const rect = [
-        // first triangle
-        u2, v1,
-        u1, v1,
-        u2, v2,
-        // second triangle
-        u1, v1,
-        u1, v2,
-        u2, v2
+        // 4 vertices per face; BoxGeometry uses 4 distinct verts per face.
+        const uvs = [
+        u1, v1,  // v0
+        u2, v1,  // v1
+        u1, v2,  // v2
+        u2, v2   // v3
         ];
 
-        for (let i = 0; i < rect.length && (start + i) < uvAttr.array.length; i++) {
-        uvAttr.array[start + i] = rect[i];
+        for (let i = 0; i < uvs.length; i++) {
+        const idx = base + i;
+        if (idx < uvAttr.array.length) {
+        uvAttr.array[idx] = uvs[i];
+        }
         }
 
         uvAttr.needsUpdate = true;
@@ -286,10 +311,11 @@
         const order = faceNameOrder();
 
         elements.forEach(el => {
-        const geom = boxGeomFromElement(el);
+        const { geom, cx, cy, cz } = boxGeomFromElement(el);
         const faces = el.faces || {};
         const groups = geom.groups || [];
 
+        // Assign materials + UVs per face
         for (let g = 0; g < Math.min(groups.length, order.length); g++) {
         const faceName = order[g];
         const face = faces[faceName] || null;
@@ -305,15 +331,40 @@
 
         const mesh = new THREE.Mesh(geom, materials);
 
-        if (el.rotation) {
+        // Build a pivot object so we can rotate around el.rotation.origin
+        const pivotObj = new THREE.Object3D();
+
+        if (el.rotation && typeof el.rotation === "object") {
         const axis = el.rotation.axis || "y";
-        const angle = (el.rotation.angle || 0) * Math.PI / 180;
-        if (axis === "x") mesh.rotateX(angle);
-        else if (axis === "y") mesh.rotateY(angle);
-        else if (axis === "z") mesh.rotateZ(angle);
+        const angleDeg = el.rotation.angle || 0;
+        const angleRad = THREE.MathUtils.degToRad(angleDeg);
+
+        const origin = Array.isArray(el.rotation.origin)
+        ? el.rotation.origin
+        : [8, 8, 8];
+
+        // Convert origin from 0..16 block coords to [-8, +8] world coords
+        const px = origin[0] - 8;
+        const py = origin[1] - 8;
+        const pz = origin[2] - 8;
+
+        // Pivot at world origin 'origin', mesh relative to that pivot
+        pivotObj.position.set(px, py, pz);
+        mesh.position.set(cx - px, cy - py, cz - pz);
+
+        if (angleRad !== 0) {
+        if (axis === "x") pivotObj.rotateX(angleRad);
+        else if (axis === "y") pivotObj.rotateY(angleRad);
+        else if (axis === "z") pivotObj.rotateZ(angleRad);
+        }
+        } else {
+        // No rotation: just place mesh at its world-space center
+        pivotObj.position.set(cx, cy, cz);
+        mesh.position.set(0, 0, 0);
         }
 
-        rootGroup.add(mesh);
+        pivotObj.add(mesh);
+        rootGroup.add(pivotObj);
         });
 
         applyDisplayTransform(rootGroup, model.display);

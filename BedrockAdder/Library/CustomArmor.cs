@@ -14,6 +14,9 @@ namespace BedrockAdder.Library
         public string? IconPath { get; set; } // Optional 2D inventory icon
         public string ArmorLayerChest { get; set; } // Needed to get the image for the chest layer(Worn)
         public string ArmorLayerLegs { get; set; } // Needed to get the image for the legs layer(Worn)
+        public string ArmorSetId { get; set; } = string.Empty; // usually the equipments.* id, e.g. "bronze_armor"
+
+        public string? RecolorTint { get; set; } // Hex color tint for recoloring, e.g. "FFE3E3"
 
         public Dictionary<string, string> ModelTexturePaths { get; } = new Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase);
     }

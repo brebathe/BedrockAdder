@@ -122,19 +122,22 @@
         return result;
         }
 
+        // Build box geometry for an element, plus its world-space center
         function boxGeomFromElement(el) {
         const f = el.from, t = el.to;
         const w = (t[0] - f[0]);
         const h = (t[1] - f[1]);
         const d = (t[2] - f[2]);
+
+        // BoxGeometry centered at (0,0,0) in local space
         const geom = new THREE.BoxGeometry(w, h, d);
 
-        // Center the element in [-8, +8] on all axes (MC-style)
+        // World-space center in Minecraft's 0..16 coordinates mapped to [-8, +8]
         const cx = (f[0] + t[0]) / 2 - 8;
         const cy = (f[1] + t[1]) / 2 - 8;
         const cz = (f[2] + t[2]) / 2 - 8;
-        geom.translate(cx, cy, cz);
-        return geom;
+
+        return { geom, cx, cy, cz };
         }
 
         function faceNameOrder() {
@@ -286,10 +289,11 @@
         const order = faceNameOrder();
 
         elements.forEach(el => {
-        const geom = boxGeomFromElement(el);
+        const { geom, cx, cy, cz } = boxGeomFromElement(el);
         const faces = el.faces || {};
         const groups = geom.groups || [];
 
+        // Assign materials + UVs per face
         for (let g = 0; g < Math.min(groups.length, order.length); g++) {
         const faceName = order[g];
         const face = faces[faceName] || null;
@@ -305,15 +309,40 @@
 
         const mesh = new THREE.Mesh(geom, materials);
 
-        if (el.rotation) {
+        // Build a pivot object so we can rotate around el.rotation.origin
+        const pivotObj = new THREE.Object3D();
+
+        if (el.rotation && typeof el.rotation === "object") {
         const axis = el.rotation.axis || "y";
-        const angle = (el.rotation.angle || 0) * Math.PI / 180;
-        if (axis === "x") mesh.rotateX(angle);
-        else if (axis === "y") mesh.rotateY(angle);
-        else if (axis === "z") mesh.rotateZ(angle);
+        const angleDeg = el.rotation.angle || 0;
+        const angleRad = THREE.MathUtils.degToRad(angleDeg);
+
+        const origin = Array.isArray(el.rotation.origin)
+        ? el.rotation.origin
+        : [8, 8, 8];
+
+        // Convert origin from 0..16 block coords to [-8, +8] world coords
+        const px = origin[0] - 8;
+        const py = origin[1] - 8;
+        const pz = origin[2] - 8;
+
+        // Pivot at world origin 'origin', mesh relative to that pivot
+        pivotObj.position.set(px, py, pz);
+        mesh.position.set(cx - px, cy - py, cz - pz);
+
+        if (angleRad !== 0) {
+        if (axis === "x") pivotObj.rotateX(angleRad);
+        else if (axis === "y") pivotObj.rotateY(angleRad);
+        else if (axis === "z") pivotObj.rotateZ(angleRad);
+        }
+        } else {
+        // No rotation: just place mesh at its world-space center
+        pivotObj.position.set(cx, cy, cz);
+        mesh.position.set(0, 0, 0);
         }
 
-        rootGroup.add(mesh);
+        pivotObj.add(mesh);
+        rootGroup.add(pivotObj);
         });
 
         applyDisplayTransform(rootGroup, model.display);

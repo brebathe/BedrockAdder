@@ -16,11 +16,7 @@ namespace BedrockAdder.ConverterWorker.ObjectWorker
         /// and CustomItem.RecolorTint. Reads from the Minecraft JAR for the selected
         /// version and writes the tinted result to outputPngAbs.
         /// </summary>
-        internal static bool TryBuildRecoloredVanillaTexture(
-            CustomItem item,
-            string selectedVersion,
-            string outputPngAbs,
-            out string? error)
+        internal static bool TryBuildRecoloredVanillaTexture(CustomItem item, string selectedVersion, string outputPngAbs, out string? error)
         {
             error = null;
 
@@ -228,6 +224,40 @@ namespace BedrockAdder.ConverterWorker.ObjectWorker
                 ApplyMultiplyTint(image, tint);
                 image.Save(destPngAbs);
             }
+        }
+
+        private static int ClampByte(int value)
+        {
+            if (value < 0) return 0;
+            if (value > 255) return 255;
+            return value;
+        }
+
+        /// <summary>
+        /// Build a recolored icon for a vanilla-based armor item.
+        /// Same source lookup as TryBuildRecoloredVanillaTexture, but uses a
+        /// brightness-normalized tint so dark iron icons get a visible color.
+        /// </summary>
+        internal static bool TryBuildRecoloredVanillaArmorTexture(
+            string armorNamespace,
+            string armorId,
+            string vanillaTextureId,
+            string recolorTint,
+            string selectedVersion,
+            string outputPngAbs,
+            out string? error)
+        {
+            // Reuse the proven item recolor pipeline so armor icons behave
+            // exactly like recolored items.
+            var dummy = new CustomItem
+            {
+                ItemNamespace = armorNamespace,
+                ItemID = armorId,
+                VanillaTextureId = vanillaTextureId,
+                RecolorTint = recolorTint
+            };
+
+            return TryBuildRecoloredVanillaTexture(dummy, selectedVersion, outputPngAbs, out error);
         }
     }
 }

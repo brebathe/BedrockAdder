@@ -243,5 +243,25 @@ namespace BedrockAdder.FileWorker
 
             return null;
         }
+        internal static bool TryGetVanillaRecolorInfo(YamlMappingNode itemProps, out string? vanillaTextureId, out string? tintHex)
+        {
+            vanillaTextureId = null;
+            tintHex = null;
+
+            if (ArmorYamlParserWorker.TryGetMapping(itemProps, "graphics", out var graphicsMap) && graphicsMap is not null)
+            {
+                ArmorYamlParserWorker.TryGetScalar(graphicsMap, "texture", out var texRaw);
+                ArmorYamlParserWorker.TryGetScalar(graphicsMap, "color", out var colorRaw);
+
+                if (!string.IsNullOrWhiteSpace(texRaw) && !string.IsNullOrWhiteSpace(colorRaw))
+                {
+                    vanillaTextureId = texRaw.Trim();   // e.g. "minecraft:item/iron_helmet.png"
+                    tintHex = colorRaw.Trim();          // e.g. "FFCC66"
+                    return true;
+                }
+            }
+
+            return false;
+        }
     }
 }

@@ -151,6 +151,14 @@ namespace BedrockAdder.Library
                     ConsoleWorker.Write.Line("info", "Finished generating bedrock furniture!");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     Task.Delay(2000).Wait();
+                    ConsoleWorker.Write.Line("info", "--------------------------------");
+                    ConsoleWorker.Write.Line("info", "Generating bedrock armors...");
+                    ConsoleWorker.Write.Line("info", "--------------------------------");
+                    Task.Delay(2000).Wait();
+                    CustomArmorBuilderWorker.BuildCustomArmors(currentSession, ItemsAdderDir, Version);
+                    ConsoleWorker.Write.Line("info", "--------------------------------");
+                    ConsoleWorker.Write.Line("info", "Finished generating bedrock armors!");
+                    ConsoleWorker.Write.Line("info", "--------------------------------");
                 }
 
                 Application.Current.Dispatcher.Invoke(() =>

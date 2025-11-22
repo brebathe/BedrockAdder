@@ -14,7 +14,6 @@ namespace BedrockAdder.ExtractorWorker.ConverterWorker
         {
             ConsoleWorker.Write.Line("info", "Armor: extraction started. Paths=" + (Lists.CustomArmorPaths?.Count ?? 0));
 
-            // Summary counters (still useful)
             int filesProcessed = 0;
             int armorItemsAdded = 0;
 
@@ -40,7 +39,7 @@ namespace BedrockAdder.ExtractorWorker.ConverterWorker
                     // 1) Determine namespace for content-pack layer resolution
                     string armorNamespaceFromFile = ArmorYamlParserWorker.GetFileNamespaceOrDefault(rootNode, "unknown");
 
-                    // 2) LAYERS PHASE — read all equipments.* entries first, log each mapping + absolute PNG path
+                    // 2) LAYERS PHASE — read all equipments.* entries first
                     var equipmentToLayers = new Dictionary<string, (string? layerChestRel, string? layerLegsRel)>(StringComparer.OrdinalIgnoreCase);
 
                     if (rootNode.Children.TryGetValue("equipments", out var equipmentsNode) && equipmentsNode is YamlMappingNode equipmentsMap)
@@ -50,11 +49,10 @@ namespace BedrockAdder.ExtractorWorker.ConverterWorker
                             if (kv.Key is not YamlScalarNode equipmentKeyNode || kv.Value is not YamlMappingNode equipmentPropsMap)
                                 continue;
 
-                            string equipmentId = equipmentKeyNode.Value ?? "";
+                            string equipmentId = equipmentKeyNode.Value ?? string.Empty;
                             if (string.IsNullOrWhiteSpace(equipmentId))
                                 continue;
 
-                            // Expect layer_1 and layer_2 (relative paths like "layers/steel_chest")
                             string? layerChestRel = null;
                             string? layerLegsRel = null;
 
@@ -66,7 +64,6 @@ namespace BedrockAdder.ExtractorWorker.ConverterWorker
 
                             equipmentToLayers[equipmentId] = (layerChestRel, layerLegsRel);
 
-                            // Build content-pack absolute paths and log them
                             string chestAbs = layerChestRel == null ? "(none)" :
                                 ArmorYamlParserWorker.BuildItemsAdderContentTexturePath(itemsAdderRootPath, armorNamespaceFromFile, layerChestRel);
                             string legsAbs = layerLegsRel == null ? "(none)" :
@@ -86,7 +83,6 @@ namespace BedrockAdder.ExtractorWorker.ConverterWorker
                                 " layer_2 → " + legsAbs + " (exists=" + legsExists + ")"
                             );
 
-                            // TEXTURE MANDATORY: missing layer textures are errors, not just soft warnings
                             if (layerChestRel != null && !chestExists)
                             {
                                 ConsoleWorker.Write.Line(
@@ -118,7 +114,7 @@ namespace BedrockAdder.ExtractorWorker.ConverterWorker
                         if (itemEntry.Key is not YamlScalarNode itemKeyNode || itemEntry.Value is not YamlMappingNode itemProps)
                             continue;
 
-                        string fullItemKey = itemKeyNode.Value ?? "";
+                        string fullItemKey = itemKeyNode.Value ?? string.Empty;
                         if (string.IsNullOrWhiteSpace(fullItemKey))
                             continue;
 
@@ -143,8 +139,6 @@ namespace BedrockAdder.ExtractorWorker.ConverterWorker
                         string? equipmentId = ArmorYamlParserWorker.GetEquipmentId(itemProps);
 
                         // Determine the layer pair to attach:
-                        // Prefer the layers defined in 'equipments' for this equipmentId;
-                        // if missing there, do the legacy filename guess.
                         string? armorLayerChestRel = null;
                         string? armorLayerLegsRel = null;
 
@@ -164,10 +158,10 @@ namespace BedrockAdder.ExtractorWorker.ConverterWorker
                             ConsoleWorker.Write.Line(
                                 "debug",
                                 "Guessed layers for " + armorNamespace + ":" + armorId +
-                                " layer_1=" + armorLayerChestRel + " layer_2=" + armorLayerLegsRel
+                                " layer_1=" + (armorLayerChestRel ?? "none") +
+                                " layer_2=" + (armorLayerLegsRel ?? "none")
                             );
 
-                            // TEXTURE MANDATORY for guessed layers as well
                             if (!string.IsNullOrWhiteSpace(armorLayerChestRel))
                             {
                                 string chestAbsGuess = ArmorYamlParserWorker.BuildItemsAdderContentTexturePath(itemsAdderRootPath, armorNamespace, armorLayerChestRel);
@@ -193,14 +187,23 @@ namespace BedrockAdder.ExtractorWorker.ConverterWorker
                             }
                         }
 
-                        // Held / GUI icon (2D) from YAML (graphics.texture preferred)
+                        // Detect vanilla recolor info like items do:
+                        string? vanillaId = null;
+                        ItemYamlParserWorker.TryDetectVanillaTexture(itemProps, out vanillaId);
+
+                        string? tint = null;
+                        ItemYamlParserWorker.TryGetRecolorTint(itemProps, out tint);
+
+                        // Held / GUI icon (2D) from YAML (graphics.texture preferred, normalized to assets/... form)
                         string? heldIconTexturePath = ArmorYamlParserWorker.TryGet2DIcon(itemProps);
 
                         string armorMaterial = ArmorYamlParserWorker.TryGetArmorMaterial(itemProps, DefaultMaterialForSlot(armorSlot));
                         int? customModelData = ArmorYamlParserWorker.TryGetCustomModelDataFromCache(itemsAdderRootPath, armorNamespace, armorId);
 
                         // Only helmets can have a 3D model (if present in YAML)
-                        string? helmetModelPathRaw = armorSlot == "helmet" ? ArmorYamlParserWorker.TryGetHelmetModelPath(itemProps) : null;
+                        string? helmetModelPathRaw = armorSlot == "helmet"
+                            ? ArmorYamlParserWorker.TryGetHelmetModelPath(itemProps)
+                            : null;
 
                         string? helmetModelResolved = null;
                         var helmetTextureMapAbs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -211,30 +214,45 @@ namespace BedrockAdder.ExtractorWorker.ConverterWorker
                             string modelNameForZip = FurnitureYamlParserWorker.NormalizeModelNameForZipLookup(normalizedModel);
                             string modelAsset = "assets/" + armorNamespace + "/models/" + modelNameForZip + ".json";
 
-                            if (JsonParserWorker.TryResolveContentAssetAbsolute(itemsAdderRootPath, modelAsset, out var modelAbs) && File.Exists(modelAbs))
+                            if (JsonParserWorker.TryResolveContentAssetAbsolute(itemsAdderRootPath, modelAsset, out var modelAbs) &&
+                                File.Exists(modelAbs))
                             {
                                 helmetModelResolved = modelAbs;
                             }
                             else
                             {
                                 helmetModelResolved = modelAsset;
-                                ConsoleWorker.Write.Line("warn", armorNamespace + ":" + armorId + " helmet model missing on disk: " + modelAsset);
+                                ConsoleWorker.Write.Line(
+                                    "warn",
+                                    armorNamespace + ":" + armorId + " helmet model missing on disk: " + modelAsset
+                                );
                             }
 
                             var helmetTextureMap = JsonParserWorker.ResolveModelTextureMapWithParents(itemsAdderRootPath, armorNamespace, modelNameForZip);
                             foreach (var kv in helmetTextureMap)
                             {
                                 string normalizedTexture = kv.Value;
-                                if (JsonParserWorker.TryResolveContentAssetAbsolute(itemsAdderRootPath, normalizedTexture, out var texAbs) && File.Exists(texAbs))
+                                if (JsonParserWorker.TryResolveContentAssetAbsolute(itemsAdderRootPath, normalizedTexture, out var texAbs) &&
+                                    File.Exists(texAbs))
                                 {
                                     helmetTextureMapAbs[kv.Key] = texAbs;
                                 }
                                 else
                                 {
-                                    ConsoleWorker.Write.Line("warn", armorNamespace + ":" + armorId + " missing helmet texture for slot " + kv.Key + ": " + normalizedTexture);
+                                    ConsoleWorker.Write.Line(
+                                        "warn",
+                                        armorNamespace + ":" + armorId +
+                                        " missing helmet texture for slot " + kv.Key + ": " + normalizedTexture
+                                    );
                                 }
                             }
                         }
+
+                        // Build the data object.
+                        // TexturePath semantics:
+                        //   - If vanillaId != null → TexturePath holds the vanilla ID (e.g. "minecraft:item/iron_helmet.png")
+                        //   - Otherwise → it will later be filled with an absolute IA icon path, or remain empty.
+                        string initialTexturePath = vanillaId ?? string.Empty;
 
                         var customArmor = new CustomArmor
                         {
@@ -243,32 +261,52 @@ namespace BedrockAdder.ExtractorWorker.ConverterWorker
                             Slot = armorSlot,
                             Material = armorMaterial,
 
-                            // GUI / Held 2D (optional override)
-                            TexturePath = string.Empty,
+                            TexturePath = initialTexturePath,
                             IconPath = null,
 
-                            // Helmet 3D model (optional)
                             ModelPath = helmetModelResolved,
-
                             CustomModelData = customModelData,
 
-                            // Worn layers: keep RELATIVE paths from YAML; we will resolve to absolute during pack build
                             ArmorLayerChest = armorLayerChestRel ?? string.Empty,
-                            ArmorLayerLegs = armorLayerLegsRel ?? string.Empty
+                            ArmorLayerLegs = armorLayerLegsRel ?? string.Empty,
+
+                            RecolorTint = tint ?? string.Empty,
+
+                            // NEW: group all pieces that share the same equipment set
+                            ArmorSetId = !string.IsNullOrWhiteSpace(equipmentId)
+                                ? equipmentId              // e.g. "bronze_armor"
+                                : armorId                  // fallback: per-item set
                         };
 
-                        if (!string.IsNullOrWhiteSpace(heldIconTexturePath))
+                        if (vanillaId != null)
                         {
-                            if (JsonParserWorker.TryResolveContentAssetAbsolute(itemsAdderRootPath, heldIconTexturePath, out var heldIconAbs, armorNamespace) && File.Exists(heldIconAbs))
+                            ConsoleWorker.Write.Line(
+                                "info",
+                                "Armor uses vanilla icon " + armorNamespace + ":" + armorId +
+                                " → " + vanillaId + " tint=" + (tint ?? "none")
+                            );
+                        }
+
+                        // If this armor is NOT vanilla-based, try resolving an IA-held icon
+                        if (vanillaId == null && !string.IsNullOrWhiteSpace(heldIconTexturePath))
+                        {
+                            if (JsonParserWorker.TryResolveContentAssetAbsolute(
+                                    itemsAdderRootPath,
+                                    heldIconTexturePath,
+                                    out var heldIconAbs,
+                                    armorNamespace
+                                ) && File.Exists(heldIconAbs))
                             {
                                 customArmor.TexturePath = heldIconAbs;
                                 customArmor.IconPath = heldIconAbs;
                             }
                             else
                             {
-                                // Icons are optional; do NOT treat missing icon as a warning/error.
-                                // Many armors legitimately use vanilla icons that won't exist in the IA content pack.
-                                ConsoleWorker.Write.Line("debug", armorNamespace + ":" + armorId + " armor icon not resolved in content pack: " + heldIconTexturePath);
+                                ConsoleWorker.Write.Line(
+                                    "debug",
+                                    armorNamespace + ":" + armorId +
+                                    " armor IA icon not resolved in content pack: " + heldIconTexturePath
+                                );
                             }
                         }
 
@@ -284,7 +322,8 @@ namespace BedrockAdder.ExtractorWorker.ConverterWorker
                             "info",
                             "Armor added " + armorNamespace + ":" + armorId +
                             " [" + armorSlot + "] equip=" + (equipmentId ?? "none") +
-                            " layers=(layer_1=" + (armorLayerChestRel ?? "none") + ", layer_2=" + (armorLayerLegsRel ?? "none") + ")"
+                            " layers=(layer_1=" + (armorLayerChestRel ?? "none") +
+                            ", layer_2=" + (armorLayerLegsRel ?? "none") + ")"
                         );
                     }
                 }
@@ -299,7 +338,6 @@ namespace BedrockAdder.ExtractorWorker.ConverterWorker
 
         private static string DefaultMaterialForSlot(string armorSlot)
         {
-            // Reasonable defaults; overridden by YAML 'material' or 'resource.material' when present
             return armorSlot switch
             {
                 "helmet" => "leather_helmet",
