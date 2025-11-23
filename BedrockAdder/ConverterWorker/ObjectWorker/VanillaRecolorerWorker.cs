@@ -229,16 +229,12 @@ namespace BedrockAdder.ConverterWorker.ObjectWorker
 
         /// <summary>
         /// Build a recolored icon for a vanilla-based armor item.
-        /// Uses the vanilla texture's *brightness* as a mask over the tint color:
+        /// Uses the vanilla texture's *brightne+0.ss* as a mask over the tint color:
         /// bright pixels become bright tinted metal, dark pixels become dark tinted metal,
         /// preserving shading while changing the color.
         /// Also writes a debug rectangle PNG (flat tint) next to the output file.
         /// </summary>
-        internal static bool TryBuildRecoloredArmorVanillaTexture(
-            CustomArmor armor,
-            string selectedVersion,
-            string outputPngAbs,
-            out string? error)
+        internal static bool TryBuildRecoloredArmorVanillaTexture(CustomArmor armor, string selectedVersion, string outputPngAbs, out string? error)
         {
             error = null;
 
@@ -350,7 +346,8 @@ namespace BedrockAdder.ConverterWorker.ObjectWorker
                         );
 
                         // ----------------------------------------------------
-                        // 2) REAL ICON: brightness-based tint over vanilla icon
+                        // 2) REAL ICON: brightness-based tint with special
+                        //    handling for white / near-white pixels.
                         // ----------------------------------------------------
                         for (int y = 0; y < height; y++)
                         {
@@ -363,20 +360,33 @@ namespace BedrockAdder.ConverterWorker.ObjectWorker
                                 if (p.A == 0)
                                     continue;
 
-                                // Compute brightness from original RGB (simple average).
-                                // Range: 0.0 – 1.0
-                                float brightness = (p.R + p.G + p.B) / (3f * 255f);
+                                // "White-ish" detection: bright interior pixels of iron icons.
+                                bool isWhiteish =
+                                    p.R >= 230 &&
+                                    p.G >= 230 &&
+                                    p.B >= 230;
 
-                                // Apply brightness to the tint color
-                                byte r = (byte)(tint.R * brightness);
-                                byte g = (byte)(tint.G * brightness);
-                                byte b = (byte)(tint.B * brightness);
+                                if (isWhiteish)
+                                {
+                                    // Force pure tint on bright inner pixels, keep alpha.
+                                    p.R = tint.R;
+                                    p.G = tint.G;
+                                    p.B = tint.B;
+                                }
+                                else
+                                {
+                                    // Normal brightness-based tint for the rest.
+                                    float brightness = (p.R + p.G + p.B) / (3f * 255f);
 
-                                p.R = r;
-                                p.G = g;
-                                p.B = b;
-                                // Keep original alpha (or modulate with tint.A if desired)
-                                // p.A = (byte)((p.A * tint.A) / 255);
+                                    byte r = (byte)(tint.R * brightness);
+                                    byte g = (byte)(tint.G * brightness);
+                                    byte b = (byte)(tint.B * brightness);
+
+                                    p.R = r;
+                                    p.G = g;
+                                    p.B = b;
+                                    // p.A unchanged
+                                }
 
                                 rowSpan[x] = p;
                             }
