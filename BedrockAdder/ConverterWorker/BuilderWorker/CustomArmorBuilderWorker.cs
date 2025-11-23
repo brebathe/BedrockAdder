@@ -191,6 +191,7 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
                         " tint=" + armor.RecolorTint +
                         " → textures/items/armors/" + baseName + ".png"
                     );
+                    ConsoleWorker.Write.Line("info", "[ARMOR ICON RECOLOR OK] FINAL PNG WRITTEN: " + iconDestAbs.Replace(Path.DirectorySeparatorChar, '/'));
                 }
                 else
                 {
@@ -243,6 +244,7 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
                                 "Armor icon copied for " + armorKey +
                                 " (" + iconSourceAbs + " → textures/items/armors/" + baseName + ".png)"
                             );
+                            ConsoleWorker.Write.Line("warn","[ARMOR ICON FALLBACK] Used fallback icon source for " + armorKey +" → " + iconDestAbs.Replace(Path.DirectorySeparatorChar, '/'));
                         }
                         catch (Exception ex)
                         {

@@ -1,22 +1,28 @@
-﻿using System;
+﻿using BedrockAdder.Library;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
+using SkiaSharp;
+using System;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
-using BedrockAdder.Library;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
 
 namespace BedrockAdder.ConverterWorker.ObjectWorker
 {
     internal static class VanillaRecolorerWorker
     {
         /// <summary>
-        /// Build a recolored icon for a vanilla-based item.
+        /// Build a recolored icon for a vanilla-based item using SkiaSharp.
         /// Uses CustomItem.VanillaTextureId (e.g. "minecraft:item/gold_nugget.png")
         /// and CustomItem.RecolorTint. Reads from the Minecraft JAR for the selected
         /// version and writes the tinted result to outputPngAbs.
         /// </summary>
-        internal static bool TryBuildRecoloredItemVanillaTexture(CustomItem item, string selectedVersion, string outputPngAbs, out string? error)
+        internal static bool TryBuildRecoloredItemVanillaTexture(
+            CustomItem item,
+            string selectedVersion,
+            string outputPngAbs,
+            out string? error
+        )
         {
             error = null;
 
@@ -45,7 +51,7 @@ namespace BedrockAdder.ConverterWorker.ObjectWorker
                 return false;
             }
 
-            if (!TryParseTint(item.RecolorTint, out var tint))
+            if (!TryParseTint(item.RecolorTint, out var tintRgba))
             {
                 error = "VanillaRecolorerWorker: failed to parse tint " + item.RecolorTint;
                 return false;
@@ -77,7 +83,6 @@ namespace BedrockAdder.ConverterWorker.ObjectWorker
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(outputPngAbs) ?? ".");
 
-                // Extract + recolor in one go (no need to write an intermediate file)
                 using (var archive = ZipFile.OpenRead(jarPath))
                 {
                     var entry = archive.GetEntry(jarRelPath.Replace('\\', '/'));
@@ -92,18 +97,62 @@ namespace BedrockAdder.ConverterWorker.ObjectWorker
                         return false;
                     }
 
-                    using (var stream = entry.Open())
-                    using (var image = Image.Load<Rgba32>(stream))
+                    // Extract into memory for Skia
+                    using (var entryStream = entry.Open())
+                    using (var ms = new MemoryStream())
                     {
-                        ApplyMultiplyTintInternal(image, tint);
-                        image.Save(outputPngAbs);
+                        entryStream.CopyTo(ms);
+                        ms.Position = 0;
+
+                        using (var bitmap = SKBitmap.Decode(ms))
+                        {
+                            if (bitmap == null)
+                            {
+                                error = "VanillaRecolorerWorker: Skia failed to decode PNG from jar: " + jarRelPath;
+                                return false;
+                            }
+
+                            int width = bitmap.Width;
+                            int height = bitmap.Height;
+
+                            // Multiply-style tint (same idea as ApplyMultiplyTintInternal)
+                            float tfR = tintRgba.R / 255f;
+                            float tfG = tintRgba.G / 255f;
+                            float tfB = tintRgba.B / 255f;
+
+                            for (int y = 0; y < height; y++)
+                            {
+                                for (int x = 0; x < width; x++)
+                                {
+                                    var p = bitmap.GetPixel(x, y);
+
+                                    if (p.Alpha == 0)
+                                        continue;
+
+                                    byte r = (byte)(p.Red * tfR);
+                                    byte g = (byte)(p.Green * tfG);
+                                    byte b = (byte)(p.Blue * tfB);
+
+                                    var outColor = new SKColor(r, g, b, p.Alpha);
+                                    bitmap.SetPixel(x, y, outColor);
+                                }
+                            }
+
+                            // Save final icon
+                            using (var image = SKImage.FromBitmap(bitmap))
+                            using (var data = image.Encode(SKEncodedImageFormat.Png, 100))
+                            using (var fs = File.Open(outputPngAbs, FileMode.Create, FileAccess.Write))
+                            {
+                                data.SaveTo(fs);
+                            }
+                        }
                     }
                 }
 
                 ConsoleWorker.Write.Line(
                     "info",
                     item.ItemNamespace + ":" + item.ItemID +
-                    " recolored vanilla texture " + item.VanillaTextureId +
+                    " recolored vanilla texture (Skia) " + item.VanillaTextureId +
                     " → " + outputPngAbs
                 );
 
@@ -111,11 +160,11 @@ namespace BedrockAdder.ConverterWorker.ObjectWorker
             }
             catch (Exception ex)
             {
-                error = "VanillaRecolorerWorker: exception while recoloring: " + ex.Message;
+                error = "VanillaRecolorerWorker: Skia exception while recoloring: " + ex.Message;
                 ConsoleWorker.Write.Line(
                     "warn",
                     item.ItemNamespace + ":" + item.ItemID +
-                    " exception while recoloring vanilla texture: " + ex.Message
+                    " Skia exception while recoloring vanilla texture: " + ex.Message
                 );
                 return false;
             }
@@ -226,18 +275,22 @@ namespace BedrockAdder.ConverterWorker.ObjectWorker
                 }
             }
         }
-
         /// <summary>
-        /// Build a recolored icon for a vanilla-based armor item.
-        /// Uses the vanilla texture's *brightne+0.ss* as a mask over the tint color:
-        /// bright pixels become bright tinted metal, dark pixels become dark tinted metal,
-        /// preserving shading while changing the color.
-        /// Also writes a debug rectangle PNG (flat tint) next to the output file.
+        /// Build a recolored icon for a vanilla-based armor item using SkiaSharp.
+        /// Uses CustomArmor.VanillaTextureId (e.g. "minecraft:item/iron_helmet.png")
+        /// and CustomArmor.RecolorTint. Reads from the Minecraft JAR for the selected
+        /// version and writes the tinted result to outputPngAbs.
         /// </summary>
-        internal static bool TryBuildRecoloredArmorVanillaTexture(CustomArmor armor, string selectedVersion, string outputPngAbs, out string? error)
+        internal static bool TryBuildRecoloredArmorVanillaTexture(
+            CustomArmor armor,
+            string selectedVersion,
+            string outputPngAbs,
+            out string? error
+        )
         {
             error = null;
 
+            // ---------- VALIDATION ----------
             if (armor == null)
             {
                 error = "VanillaRecolorerWorker: item is null";
@@ -263,27 +316,25 @@ namespace BedrockAdder.ConverterWorker.ObjectWorker
                 return false;
             }
 
-            if (!TryParseTint(armor.RecolorTint, out var tint))
+            if (!TryParseTint(armor.RecolorTint, out var tintRgba))
             {
                 error = "VanillaRecolorerWorker: failed to parse tint " + armor.RecolorTint;
                 return false;
             }
 
-            // Resolve JAR path: %APPDATA%\.minecraft\versions\<version>\<version>.jar
+            // ---------- LOCATE VANILLA JAR ----------
             string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             string jarPath = Path.Combine(appData, ".minecraft", "versions", selectedVersion, selectedVersion + ".jar");
 
             if (!File.Exists(jarPath))
             {
                 error = "VanillaRecolorerWorker: Minecraft JAR not found at " + jarPath;
-                ConsoleWorker.Write.Line(
-                    "warn",
-                    armor.ArmorNamespace + ":" + armor.ArmorID + " vanilla jar missing: " + jarPath
-                );
+                ConsoleWorker.Write.Line("warn",
+                    armor.ArmorNamespace + ":" + armor.ArmorID +
+                    " vanilla jar missing: " + jarPath);
                 return false;
             }
 
-            // Determine the internal PNG path inside the jar
             string jarRelPath = BuildVanillaTextureJarPath(armor.VanillaTextureId);
             if (string.IsNullOrWhiteSpace(jarRelPath))
             {
@@ -295,7 +346,6 @@ namespace BedrockAdder.ConverterWorker.ObjectWorker
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(outputPngAbs) ?? ".");
 
-                // Extract + recolor in one go (no need to write an intermediate file)
                 using (var archive = ZipFile.OpenRead(jarPath))
                 {
                     var entry = archive.GetEntry(jarRelPath.Replace('\\', '/'));
@@ -310,96 +360,61 @@ namespace BedrockAdder.ConverterWorker.ObjectWorker
                         return false;
                     }
 
-                    using (var stream = entry.Open())
-                    using (var image = Image.Load<Rgba32>(stream))
+                    // Extract into memory for Skia
+                    using (var entryStream = entry.Open())
+                    using (var ms = new MemoryStream())
                     {
-                        int width = image.Width;
-                        int height = image.Height;
+                        entryStream.CopyTo(ms);
+                        ms.Position = 0;
 
-                        // ----------------------------------------------------
-                        // 1) DEBUG RECTANGLE: flat tint, same size as icon
-                        //    Saved as "<baseName>_debug.png" in the same folder.
-                        // ----------------------------------------------------
-                        string outDir = Path.GetDirectoryName(outputPngAbs) ?? ".";
-                        string baseName = Path.GetFileNameWithoutExtension(outputPngAbs) ?? "armor_icon";
-                        string debugPath = Path.Combine(outDir, baseName + "_debug.png");
-
-                        using (var debugImage = new Image<Rgba32>(width, height))
+                        using (var bitmap = SKBitmap.Decode(ms))
                         {
+                            if (bitmap == null)
+                            {
+                                error = "VanillaRecolorerWorker: Skia failed to decode PNG from jar: " + jarRelPath;
+                                return false;
+                            }
+
+                            int width = bitmap.Width;
+                            int height = bitmap.Height;
+
+                            float tfR = tintRgba.R / 255f;
+                            float tfG = tintRgba.G / 255f;
+                            float tfB = tintRgba.B / 255f;
+
                             for (int y = 0; y < height; y++)
                             {
-                                var rowSpan = debugImage.GetPixelRowSpan(y);
                                 for (int x = 0; x < width; x++)
                                 {
-                                    // fully opaque tint pixel
-                                    rowSpan[x] = new Rgba32(tint.R, tint.G, tint.B, 255);
+                                    var p = bitmap.GetPixel(x, y);
+
+                                    if (p.Alpha == 0)
+                                        continue;
+
+                                    byte r = (byte)(p.Red * tfR);
+                                    byte g = (byte)(p.Green * tfG);
+                                    byte b = (byte)(p.Blue * tfB);
+
+                                    var outColor = new SKColor(r, g, b, p.Alpha);
+                                    bitmap.SetPixel(x, y, outColor);
                                 }
                             }
 
-                            debugImage.Save(debugPath);
-                        }
-
-                        ConsoleWorker.Write.Line(
-                            "info",
-                            armor.ArmorNamespace + ":" + armor.ArmorID +
-                            " debug tint rectangle written → " + debugPath.Replace(Path.DirectorySeparatorChar, '/')
-                        );
-
-                        // ----------------------------------------------------
-                        // 2) REAL ICON: brightness-based tint with special
-                        //    handling for white / near-white pixels.
-                        // ----------------------------------------------------
-                        for (int y = 0; y < height; y++)
-                        {
-                            var rowSpan = image.GetPixelRowSpan(y);
-                            for (int x = 0; x < width; x++)
+                            // Save final icon
+                            using (var image = SKImage.FromBitmap(bitmap))
+                            using (var data = image.Encode(SKEncodedImageFormat.Png, 100))
+                            using (var fs = File.Open(outputPngAbs, FileMode.Create, FileAccess.Write))
                             {
-                                var p = rowSpan[x];
-
-                                // Skip fully transparent pixels
-                                if (p.A == 0)
-                                    continue;
-
-                                // "White-ish" detection: bright interior pixels of iron icons.
-                                bool isWhiteish =
-                                    p.R >= 230 &&
-                                    p.G >= 230 &&
-                                    p.B >= 230;
-
-                                if (isWhiteish)
-                                {
-                                    // Force pure tint on bright inner pixels, keep alpha.
-                                    p.R = tint.R;
-                                    p.G = tint.G;
-                                    p.B = tint.B;
-                                }
-                                else
-                                {
-                                    // Normal brightness-based tint for the rest.
-                                    float brightness = (p.R + p.G + p.B) / (3f * 255f);
-
-                                    byte r = (byte)(tint.R * brightness);
-                                    byte g = (byte)(tint.G * brightness);
-                                    byte b = (byte)(tint.B * brightness);
-
-                                    p.R = r;
-                                    p.G = g;
-                                    p.B = b;
-                                    // p.A unchanged
-                                }
-
-                                rowSpan[x] = p;
+                                data.SaveTo(fs);
                             }
                         }
-
-                        image.Save(outputPngAbs);
                     }
                 }
 
                 ConsoleWorker.Write.Line(
                     "info",
                     armor.ArmorNamespace + ":" + armor.ArmorID +
-                    " recolored vanilla texture " + armor.VanillaTextureId +
+                    " recolored vanilla armor icon (Skia) " + armor.VanillaTextureId +
                     " → " + outputPngAbs
                 );
 
@@ -407,11 +422,11 @@ namespace BedrockAdder.ConverterWorker.ObjectWorker
             }
             catch (Exception ex)
             {
-                error = "VanillaRecolorerWorker: exception while recoloring: " + ex.Message;
+                error = "VanillaRecolorerWorker: Skia exception while recoloring: " + ex.Message;
                 ConsoleWorker.Write.Line(
                     "warn",
                     armor.ArmorNamespace + ":" + armor.ArmorID +
-                    " exception while recoloring vanilla texture: " + ex.Message
+                    " Skia exception while recoloring vanilla texture: " + ex.Message
                 );
                 return false;
             }
