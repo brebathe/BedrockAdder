@@ -159,8 +159,17 @@ namespace BedrockAdder.Library
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Finished generating bedrock armors!");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
+                    Task.Delay(2000).Wait();
+                    ConsoleWorker.Write.Line("info", "--------------------------------");
+                    ConsoleWorker.Write.Line("info", "Generating bedrock fonts/guis/huds...");
+                    ConsoleWorker.Write.Line("info", "--------------------------------");
+                    CustomFontBuilderWorker.BuildCustomFonts(currentSession, ItemsAdderDir);
+                    Task.Delay(2000).Wait();
+                    ConsoleWorker.Write.Line("info", "--------------------------------");
+                    ConsoleWorker.Write.Line("info", "Finished generating bedrock fonts/guis/huds!");
+                    ConsoleWorker.Write.Line("info", "--------------------------------");
+                    Task.Delay(2000).Wait();
                 }
-
                 Application.Current.Dispatcher.Invoke(() =>
                 {
                     ConvertButton.IsEnabled = true;

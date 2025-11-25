@@ -88,8 +88,27 @@ namespace BedrockAdder.FileWorker
                         string setPartFromFlat = "";
 
                         var idx = fullKey.IndexOf(':');
-                        if (idx >= 0) { nsPart = fullKey.Substring(0, idx); setPartFromFlat = fullKey.Substring(idx + 1); }
+                        if (idx >= 0)
+                        {
+                            nsPart = fullKey.Substring(0, idx);
+                            setPartFromFlat = fullKey.Substring(idx + 1);
+                        }
 
+                        // NEW: handle flat "ns:setId: glyph" form
+                        if (nsEntry.Value is YamlScalarNode uniScalar)
+                        {
+                            string glyph = uniScalar.Value ?? "";
+                            if (!string.IsNullOrWhiteSpace(nsPart) &&
+                                !string.IsNullOrWhiteSpace(setPartFromFlat) &&
+                                !string.IsNullOrWhiteSpace(glyph))
+                            {
+                                // use empty rel as sentinel
+                                _fontUnicodeCache.TryAdd((nsPart, setPartFromFlat, string.Empty), glyph);
+                            }
+                            continue;
+                        }
+
+                        // existing logic for mapping/sequence formats
                         if (nsEntry.Value is YamlMappingNode nsValMap)
                         {
                             foreach (var setEntry in nsValMap.Children)
@@ -136,8 +155,22 @@ namespace BedrockAdder.FileWorker
         internal static string? TryGetUnicodeFromCache(string itemsAdderRoot, string fontNamespace, string setId, string rpRelativeTexture)
         {
             EnsureFontUnicodeCacheLoaded(itemsAdderRoot);
-            var key = (fontNamespace, setId, NormalizeFontTextureRel(rpRelativeTexture));
-            return _fontUnicodeCache.TryGetValue(key, out var val) ? val : null;
+
+            string normalizedRel = string.Empty;
+            if (!string.IsNullOrWhiteSpace(rpRelativeTexture))
+                normalizedRel = NormalizeFontTextureRel(rpRelativeTexture);
+
+            // 1) Try exact match (ns + setId + normalized path)
+            var keyPath = (fontNamespace, setId, normalizedRel);
+            if (_fontUnicodeCache.TryGetValue(keyPath, out var valPath))
+                return valPath;
+
+            // 2) Fallback: flat "ns:setId: glyph" entries stored with empty rel
+            var keyFlat = (fontNamespace, setId, string.Empty);
+            if (_fontUnicodeCache.TryGetValue(keyFlat, out var valFlat))
+                return valFlat;
+
+            return null;
         }
 
         internal static string NormalizeFontTextureRel(string raw)
@@ -187,5 +220,32 @@ namespace BedrockAdder.FileWorker
                 if (!string.IsNullOrWhiteSpace(v)) return v;
             return null;
         }
+
+        internal static bool DetectIsGuiFile(string filePath)
+        {
+            try
+            {
+                using var reader = new StreamReader(filePath);
+                string? firstLine = reader.ReadLine();
+
+                if (firstLine == null)
+                    return false;
+
+                // Handle possible BOM + whitespace
+                firstLine = firstLine.TrimStart('\uFEFF').Trim();
+
+                // User convention: very first line starts with #isGui
+                if (firstLine.StartsWith("#isGui", StringComparison.OrdinalIgnoreCase))
+                    return true;
+
+                return false;
+            }
+            catch
+            {
+                // On any IO error, just treat it as a normal font file
+                return false;
+            }
+        }
+
     }
 }

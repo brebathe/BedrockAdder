@@ -26,6 +26,9 @@ namespace BedrockAdder.ExtractorWorker.ConverterWorker
                         continue;
                     }
 
+                    // Detect if this entire YAML file is a GUI definitions file
+                    bool isGuiFile = FontYamlParserWorker.DetectIsGuiFile(filePath);
+
                     using var reader = new StreamReader(filePath);
                     var yaml = new YamlStream();
                     yaml.Load(reader);
@@ -44,8 +47,8 @@ namespace BedrockAdder.ExtractorWorker.ConverterWorker
 
                         string fontSetId = setKey.Value ?? "default";
 
-                        // scale_ratio at set level (default 1)
-                        int scaleRatio = 1;
+                        // scale_ratio at set level (optional)
+                        int? scaleRatio = null;
                         if (MainYamlParserWorker.TryGetScalar(setMap, "scale_ratio", out var sr) && int.TryParse(sr, out var srInt))
                             scaleRatio = srInt;
 
@@ -71,7 +74,8 @@ namespace BedrockAdder.ExtractorWorker.ConverterWorker
                                     FontNamespace = fontNamespace,
                                     ScaleRatio = scaleRatio,
                                     YPosition = yPos,
-                                    FontSymbol = symbol
+                                    FontSymbol = symbol,
+                                    IsGui = isGuiFile
                                 };
 
                                 Lists.CustomFonts.Add(cfSet);
@@ -82,8 +86,9 @@ namespace BedrockAdder.ExtractorWorker.ConverterWorker
                                 ConsoleWorker.Write.Line(
                                     exists ? "info" : "warn",
                                     "Font set " + fontNamespace + ":" + fontSetId +
-                                    " path=" + textureRel + " (exists=" + exists + ") scale=" + scaleRatio + " y=" + yPos +
-                                    (string.IsNullOrEmpty(symbol) ? "" : " char='" + symbol + "'")
+                                    " path=" + textureRel + " (exists=" + exists + ") scale=" + (scaleRatio?.ToString() ?? "null") + " y=" + yPos +
+                                    (string.IsNullOrEmpty(symbol) ? "" : " char='" + symbol + "'") +
+                                    (isGuiFile ? " [GUI]" : "")
                                 );
                             }
 
@@ -128,18 +133,20 @@ namespace BedrockAdder.ExtractorWorker.ConverterWorker
                                 FontNamespace = fontNamespace,
                                 ScaleRatio = scaleRatio,
                                 YPosition = yPos,
-                                FontSymbol = charDecoded
+                                FontSymbol = charDecoded,
+                                IsGui = isGuiFile
                             };
 
                             Lists.CustomFonts.Add(cf);
                             glyphsAdded++;
 
-                            string abs = FontYamlParserWorker.BuildIaContentFontTextureAbs(itemsAdderRoot, fontNamespace, textureRel);
-                            bool exists = File.Exists(abs);
+                            string absGlyph = FontYamlParserWorker.BuildIaContentFontTextureAbs(itemsAdderRoot, fontNamespace, textureRel);
+                            bool existsGlyph = File.Exists(absGlyph);
                             ConsoleWorker.Write.Line(
-                                exists ? "info" : "warn",
+                                existsGlyph ? "info" : "warn",
                                 "Font glyph " + fontNamespace + ":" + fontSetId +
-                                " char='" + charDecoded + "' tex=" + textureRel + " (exists=" + exists + ") scale=" + scaleRatio + " y=" + yPos
+                                " char='" + charDecoded + "' tex=" + textureRel + " (exists=" + existsGlyph + ") scale=" + (scaleRatio?.ToString() ?? "null") + " y=" + yPos +
+                                (isGuiFile ? " [GUI]" : "")
                             );
                         }
                     }
