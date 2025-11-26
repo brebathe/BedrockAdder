@@ -169,6 +169,15 @@ namespace BedrockAdder.Library
                     ConsoleWorker.Write.Line("info", "Finished generating bedrock fonts/guis/huds!");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     Task.Delay(2000).Wait();
+                    ConsoleWorker.Write.Line("info", "--------------------------------");
+                    ConsoleWorker.Write.Line("info", "Generating bedrock sounds...");
+                    ConsoleWorker.Write.Line("info", "--------------------------------");
+                    CustomSoundBuilderWorker.BuildCustomSounds(currentSession, ItemsAdderDir);
+                    Task.Delay(2000).Wait();
+                    ConsoleWorker.Write.Line("info", "--------------------------------");
+                    ConsoleWorker.Write.Line("info", "Finished generating bedrock sounds!");
+                    ConsoleWorker.Write.Line("info", "--------------------------------");
+                    Task.Delay(2000).Wait();
                 }
                 Application.Current.Dispatcher.Invoke(() =>
                 {

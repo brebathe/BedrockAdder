@@ -10,9 +10,8 @@ namespace BedrockAdder.ExtractorWorker.ConverterWorker
     internal static class CustomSoundExtractorWorker
     {
         // Parse all provided sounds.yml files and append to Lists (or return the list).
-        internal static List<CustomSound> ExtractCustomSoundsFromPaths(string itemsAdderRoot)
+        internal static void ExtractCustomSoundsFromPaths(string itemsAdderRoot)
         {
-            var results = new List<CustomSound>();
             int filesProcessed = 0;
 
             foreach (var filePath in Lists.CustomSoundPaths)
@@ -62,7 +61,7 @@ namespace BedrockAdder.ExtractorWorker.ConverterWorker
 
                         var (vol, pitch, stream) = ReadSettings(sMap);
 
-                        results.Add(new CustomSound
+                        Lists.CustomSounds.Add(new CustomSound
                         {
                             SoundNamespace = ns,
                             SoundID = soundId,
@@ -93,7 +92,7 @@ namespace BedrockAdder.ExtractorWorker.ConverterWorker
                             // Inherit base settings but allow overrides (pitch/volume/stream)
                             var (vVol, vPitch, vStream) = ReadSettingsOverride(vMap, vol, pitch, stream);
 
-                            results.Add(new CustomSound
+                            Lists.CustomSounds.Add(new CustomSound
                             {
                                 SoundNamespace = ns,
                                 SoundID = soundId,          // same ID; Bedrock builder will group these
@@ -111,8 +110,7 @@ namespace BedrockAdder.ExtractorWorker.ConverterWorker
                 }
             }
 
-            ConsoleWorker.Write.Line("info", "Sounds: processed files=" + filesProcessed + " entries=" + results.Count);
-            return results;
+            ConsoleWorker.Write.Line("info", "Sounds: processed files=" + filesProcessed + " entries=" + Lists.CustomSounds.Count);
         }
 
         // --- local YAML helpers (mirror style of your existing parser) ---
@@ -154,7 +152,6 @@ namespace BedrockAdder.ExtractorWorker.ConverterWorker
                 if (TryGetScalar(set, "pitch", out var p) && float.TryParse(p, out var pf)) pitch = pf;
                 if (TryGetScalar(set, "stream", out var st) && bool.TryParse(st, out var sb)) stream = sb;
             }
-
             return (vol, pitch, stream);
         }
 

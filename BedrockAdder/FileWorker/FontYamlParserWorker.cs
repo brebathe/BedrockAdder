@@ -13,8 +13,7 @@ namespace BedrockAdder.FileWorker
         private static bool _fontCacheLoaded = false;
 
         // Key: (namespace, setId, normalizedTextureRel) -> unicode string (e.g. "\uE700")
-        private static readonly ConcurrentDictionary<(string ns, string setId, string rel), string> _fontUnicodeCache
-            = new ConcurrentDictionary<(string, string, string), string>();
+        private static readonly ConcurrentDictionary<(string ns, string setId, string rel), string> _fontUnicodeCache = new ConcurrentDictionary<(string, string, string), string>();
 
         internal static string GetFileNamespaceOrDefault(YamlMappingNode root, string defaultNamespace)
         {

@@ -118,6 +118,7 @@
     <Compile Include="ConverterWorker\BuilderWorker\CustomBlockBuilderWorker.cs" />
     <Compile Include="ConverterWorker\BuilderWorker\CustomFontBuilderWorker.cs" />
     <Compile Include="ConverterWorker\BuilderWorker\CustomFurnitureBuilderWorker.cs" />
+    <Compile Include="ConverterWorker\BuilderWorker\CustomSoundBuilder.cs" />
     <Compile Include="ConverterWorker\ObjectWorker\AtlasBuilderWorker.cs" />
     <Compile Include="ConverterWorker\ObjectWorker\CustomRecolorerWorker.cs" />
     <Compile Include="ConverterWorker\ObjectWorker\ModelImageBuilderWorker.cs" />

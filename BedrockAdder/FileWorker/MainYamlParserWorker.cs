@@ -32,7 +32,7 @@ namespace BedrockAdder.FileWorker
                 return "Font";
 
             // treat pure sounds config as Sound
-            if (root.Children.ContainsKey("sounds") && !root.Children.ContainsKey("items"))
+            if (root.Children.ContainsKey("sounds"))
                 return "Sound";
 
             // files that only define armor sets but no items
@@ -120,36 +120,6 @@ namespace BedrockAdder.FileWorker
 
         #region Classification helpers (per-entry)
 
-
-        internal static string GetFileNameSpace(string filePath)
-        {
-            if (string.IsNullOrWhiteSpace(filePath))
-            {
-                return "unknown";
-            }
-
-            // Normalise separators
-            var normalized = filePath.Replace('\\', '/');
-
-            // We expect ".../contents/{namespace}/..."
-            var contentsToken = "/contents/";
-            var idx = normalized.IndexOf(contentsToken, StringComparison.OrdinalIgnoreCase);
-            if (idx < 0)
-            {
-                return "unknown";
-            }
-
-            var start = idx + contentsToken.Length;
-            var rest = normalized.Substring(start);
-            var firstSlash = rest.IndexOf('/');
-            if (firstSlash < 0)
-            {
-                return "unknown";
-            }
-
-            var ns = rest.Substring(0, firstSlash).Trim();
-            return string.IsNullOrWhiteSpace(ns) ? "unknown" : ns;
-        }
 
         /// <summary>
         /// Quick per-entry check: is this items[*] entry a block?

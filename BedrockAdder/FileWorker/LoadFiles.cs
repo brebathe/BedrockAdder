@@ -35,32 +35,40 @@ namespace BedrockAdder.FileWorker
                     case "Font":
                         countFonts++;
                         Lists.CustomFontPaths.Add(file);
+                        Write.Line("info","File " + file + " classified as Font");
                         break;
                     case "Item":
                         Lists.CustomItemPaths.Add(file);
+                        Write.Line("info", "File " + file + " classified as Items");
                         countItems++;
                         break;
                     case "Block":
                         Lists.CustomBlockPaths.Add(file);
+                        Write.Line("info", "File " + file + " classified as Blocks");
                         countBlocks++;
                         break;
                     case "Sound":
                         Lists.CustomSoundPaths.Add(file);
+                        Write.Line("info", "File " + file + " classified as Sounds");
                         countSounds++;
                         break;
                     case "Furniture":
                         Lists.CustomFurniturePaths.Add(file);
+                        Write.Line("info", "File " + file + " classified as Furniture");
                         countFurniture++;
                         break;
                     case "Armor":
                         Lists.CustomArmorPaths.Add(file);
+                        Write.Line("info", "File " + file + " classified as Armors");
                         countArmors++;
                         break;
                     case "Unknown":
                         Lists.UnknownPaths.Add(file);
+                        Write.Line("info", "File " + file + " classified as Unknown");
                         countUnknown++;
                         break;
                     case "Skip":
+                        Write.Line("warning", "File " + file + " was skipped!");
                         Lists.SkippedFilePaths.Add(file);
                         break;
                 }
