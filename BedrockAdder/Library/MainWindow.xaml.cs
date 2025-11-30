@@ -62,7 +62,6 @@ namespace BedrockAdder.Library
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Finished extracting custom items!");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
-                    Task.Delay(4000).Wait();
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Extracting custom blocks...");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
@@ -71,7 +70,6 @@ namespace BedrockAdder.Library
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Finished extracting custom blocks!");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
-                    Task.Delay(4000).Wait();
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Extracting custom armors...");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
@@ -80,7 +78,6 @@ namespace BedrockAdder.Library
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Finished extracting custom armors!");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
-                    Task.Delay(4000).Wait();
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Extracting custom furniture...");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
@@ -89,7 +86,6 @@ namespace BedrockAdder.Library
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Finished extracting custom furniture!");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
-                    Task.Delay(4000).Wait();
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Extracting custom fonts...");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
@@ -98,7 +94,6 @@ namespace BedrockAdder.Library
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Finished extracting custom fonts!");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
-                    Task.Delay(4000).Wait();
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Extracting custom sounds...");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
@@ -107,7 +102,6 @@ namespace BedrockAdder.Library
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Finished extracting custom sounds!");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
-                    Task.Delay(4000).Wait();
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Generating base bedrock pack...");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
@@ -124,15 +118,22 @@ namespace BedrockAdder.Library
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Finished generating base bedrock pack!");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
-                    Task.Delay(2000).Wait();
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Generating bedrock items...");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
+                    Task.Delay(2000).Wait();
                     CustomItemBuilderWorker.BuildCustomItems(currentSession, 128, ItemsAdderDir);
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Finished generating bedrock items!");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
+                    ConsoleWorker.Write.Line("info", "--------------------------------");
+                    ConsoleWorker.Write.Line("info", "Generating animation controllers...");
+                    ConsoleWorker.Write.Line("info", "--------------------------------");
                     Task.Delay(2000).Wait();
+                    AnimationControllerBuilderWorker.BuildCustomAnimationControllers(currentSession);
+                    ConsoleWorker.Write.Line("info", "--------------------------------");
+                    ConsoleWorker.Write.Line("info", "Finished generating animation controllers!");
+                    ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Generating bedrock blocks...");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
@@ -141,7 +142,6 @@ namespace BedrockAdder.Library
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Finished generating bedrock blocks!");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
-                    Task.Delay(2000).Wait();
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Generating bedrock furniture...");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
@@ -150,7 +150,6 @@ namespace BedrockAdder.Library
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Finished generating bedrock furniture!");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
-                    Task.Delay(2000).Wait();
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Generating bedrock armors...");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
@@ -159,7 +158,6 @@ namespace BedrockAdder.Library
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Finished generating bedrock armors!");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
-                    Task.Delay(2000).Wait();
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Generating bedrock fonts/guis/huds...");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
@@ -168,7 +166,6 @@ namespace BedrockAdder.Library
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Finished generating bedrock fonts/guis/huds!");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
-                    Task.Delay(2000).Wait();
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Generating bedrock sounds...");
                     ConsoleWorker.Write.Line("info", "--------------------------------");

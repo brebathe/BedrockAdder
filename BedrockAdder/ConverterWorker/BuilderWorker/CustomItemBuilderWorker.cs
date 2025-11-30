@@ -305,7 +305,7 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
             {
                 try
                 {
-                    AnimationControllerBuilder.RegisterSpecialItem(session, it);
+                    AnimationControllerBuilderWorker.RegisterSpecialItem(session, it);
                 }
                 catch (Exception ex)
                 {

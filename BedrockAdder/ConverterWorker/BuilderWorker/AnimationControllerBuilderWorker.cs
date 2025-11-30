@@ -8,7 +8,7 @@ using BedrockAdder.Library;
 
 namespace BedrockAdder.ConverterWorker.BuilderWorker
 {
-    internal static class AnimationControllerBuilder
+    internal static class AnimationControllerBuilderWorker
     {
         // All special items (bows, crossbows, shields, fishing rods, tridents)
         private static readonly List<CustomItem> _specialItems = new List<CustomItem>();
@@ -43,7 +43,7 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
         /// separate states per tool type keyed off tags we will later map in Geyser:
         ///   cube:is_bow, cube:is_crossbow, cube:is_shield, cube:is_fishing_rod, cube:is_trident
         /// </summary>
-        internal static void BuildControllers(PackSession session)
+        internal static void BuildCustomAnimationControllers(PackSession session)
         {
             if (session == null)
             {
