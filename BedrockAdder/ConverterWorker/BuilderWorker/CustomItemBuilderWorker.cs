@@ -5,7 +5,8 @@ using Newtonsoft.Json.Linq;
 using BedrockAdder.Library;
 using BedrockAdder.Managers;
 using BedrockAdder.ConverterWorker.ObjectWorker;           // ModelBuilderWorker, ModelImageBuilderWorker, VanillaRecolorerWorker, CustomRecolorerWorker
-using BedrockAdder.Renderer;                               // CefOffscreenIconRenderer (IModelIconRenderer)
+using BedrockAdder.Renderer;
+using BedrockAdder.FileWorker;                               // CefOffscreenIconRenderer (IModelIconRenderer)
 
 namespace BedrockAdder.ConverterWorker.BuilderWorker
 {
@@ -300,6 +301,10 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
             // Write minimal item definition json (binds to atlas key)
             WriteItemDefinition(session, bedrockId, atlasKey);
 
+            // Copy any per-state 2D textures (graphics.textures.*) into the pack
+            // so state frames are available for animations/render controllers.
+            CopyStateTextures(session, it);
+
             // 🔹 NEW: register special items for animation controller building
             if (IsSpecialToolMaterial(it.Material))
             {
@@ -409,6 +414,153 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
                 || material.Equals("CROSSBOW", StringComparison.OrdinalIgnoreCase)
                 || material.Equals("FISHING_ROD", StringComparison.OrdinalIgnoreCase)
                 || material.Equals("SHIELD", StringComparison.OrdinalIgnoreCase) || material.Equals("TRIDENT", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// For items that define a base 3D model via resource.model_path and use a
+        /// special tool material (BOW, CROSSBOW, SHIELD, FISHING_ROD, TRIDENT),
+        /// automatically derive state models based on ItemsAdder naming conventions.
+        /// 
+        /// Example:
+        ///   base = "frost_spear"
+        ///   TRIDENT → state "throwing" → "frost_spear_throwing.json"
+        /// </summary>
+        private static void PopulateResourceStateModels(
+            CustomItem customItem,
+            string itemsAdderFolder,
+            string? itemNamespace,
+            string baseModelName,
+            string itemId)
+        {
+            if (string.IsNullOrWhiteSpace(itemNamespace))
+                return;
+
+            if (string.IsNullOrWhiteSpace(customItem.Material))
+                return;
+
+            string material = customItem.Material.ToUpperInvariant();
+
+            // Make sure we only handle the relevant materials
+            bool isSpecial =
+                material.Contains("BOW") ||
+                material.Contains("CROSSBOW") ||
+                material.Contains("SHIELD") ||
+                material.Contains("FISHING_ROD") ||
+                material.Contains("TRIDENT");
+
+            if (!isSpecial)
+                return;
+
+            string baseName = baseModelName; // already without extension
+            var candidates = new System.Collections.Generic.List<(string state, string modelName)>();
+
+            if (material.Contains("BOW") && !material.Contains("CROSSBOW"))
+            {
+                // BOW: X_pulling_0/1/2
+                candidates.Add(("pulling_0", baseName + "_pulling_0"));
+                candidates.Add(("pulling_1", baseName + "_pulling_1"));
+                candidates.Add(("pulling_2", baseName + "_pulling_2"));
+            }
+            else if (material.Contains("CROSSBOW"))
+            {
+                // CROSSBOW: X_pulling_0/1/2, X_arrow, X_firework
+                candidates.Add(("pulling_0", baseName + "_pulling_0"));
+                candidates.Add(("pulling_1", baseName + "_pulling_1"));
+                candidates.Add(("pulling_2", baseName + "_pulling_2"));
+                candidates.Add(("arrow", baseName + "_arrow"));
+                candidates.Add(("rocket", baseName + "_firework"));
+            }
+            else if (material.Contains("SHIELD"))
+            {
+                // SHIELD: X_blocking
+                candidates.Add(("blocking", baseName + "_blocking"));
+            }
+            else if (material.Contains("FISHING_ROD"))
+            {
+                // FISHING ROD: X_cast
+                candidates.Add(("cast", baseName + "_cast"));
+            }
+            else if (material.Contains("TRIDENT"))
+            {
+                // TRIDENT: X_throwing
+                candidates.Add(("throwing", baseName + "_throwing"));
+            }
+
+            foreach (var (state, modelName) in candidates)
+            {
+                // Don't override explicit graphics.models definitions if present
+                if (customItem.StateModelPaths.ContainsKey(state))
+                    continue;
+
+                string modelAsset = "assets/" + itemNamespace + "/models/" + modelName + ".json";
+
+                if (JsonParserWorker.TryResolveContentAssetAbsolute(itemsAdderFolder, modelAsset, out var modelAbs) &&
+                    File.Exists(modelAbs))
+                {
+                    customItem.StateModelPaths[state] = modelAbs;
+                    ConsoleWorker.Write.Line("info",
+                        itemNamespace + ":" + itemId + " resource-derived state model[" + state + "] → " + modelAbs);
+                }
+                else
+                {
+                    ConsoleWorker.Write.Line("warn",
+                        itemNamespace + ":" + itemId + " missing resource state model " + state + ": " + modelAsset);
+                }
+            }
+        }
+
+
+        /// <summary>
+        /// Copies per-state 2D textures into the Bedrock pack so that multi-state
+        /// items (bows, rods, etc.) have all their frames available.
+        /// 
+        /// We do NOT wire these into the item atlas yet; they are assets that
+        /// animation controllers / attachables can reference later.
+        /// 
+        /// Output pattern:
+        ///   textures/items/{namespace}/{id}_{state}.png
+        /// e.g.  textures/items/ranged/black_bow_bow_0.png
+        /// </summary>
+        private static void CopyStateTextures(PackSession session, CustomItem it)
+        {
+            if (it.StateTexturePaths == null || it.StateTexturePaths.Count == 0)
+                return;
+
+            string ns = it.ItemNamespace ?? "unknown";
+            string id = it.ItemID ?? "unknown";
+
+            foreach (var kv in it.StateTexturePaths)
+            {
+                string stateName = kv.Key;
+                string src = kv.Value;
+
+                if (string.IsNullOrWhiteSpace(stateName) ||
+                    string.IsNullOrWhiteSpace(src) ||
+                    !File.Exists(src))
+                {
+                    continue;
+                }
+
+                string safeState = Sanitize(stateName);
+                string ext = Path.GetExtension(src);
+                if (string.IsNullOrEmpty(ext))
+                    ext = ".png";
+
+                string fileName = Sanitize(id) + "_" + safeState + ext;
+                string rel = Path.Combine("textures", "items", ns, fileName).Replace('\\', '/');
+                string abs = Path.Combine(session.PackRoot, rel.Replace('/', Path.DirectorySeparatorChar));
+
+                try
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(abs)!);
+                    File.Copy(src, abs, true);
+                    ConsoleWorker.Write.Line("info", ns + ":" + id + " state texture [" + stateName + "] → " + rel);
+                }
+                catch (Exception ex)
+                {
+                    ConsoleWorker.Write.Line("warn", ns + ":" + id + " failed copying state texture [" + stateName + "]: " + ex.Message);
+                }
+            }
         }
     }
 }

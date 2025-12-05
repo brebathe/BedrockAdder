@@ -45,19 +45,19 @@ namespace BedrockAdder.Library
                     {
                         ConsoleWorker.Write.Line("warn", "Could not delete previous log file: " + ex.Message);
                     }
-                    Task.Delay(4000).Wait();
+                    Task.Delay(2000).Wait();
                     ConsoleWorker.Write.Line("info", "All paths are valid ✅. Starting conversion... 🔨");
-                    Task.Delay(4000).Wait();
+                    Task.Delay(2000).Wait();
                     ConsoleWorker.Write.Line("info", "Scanning YAML files...");
-                    Task.Delay(4000).Wait();
+                    Task.Delay(2000).Wait();
                     LoadFiles.ScanYamlFiles(ItemsAdderDir);
-                    Task.Delay(4000).Wait();
+                    Task.Delay(2000).Wait();
                     ConsoleWorker.Write.Line("info", "YAML file scan complete.");
-                    Task.Delay(4000).Wait();
+                    Task.Delay(2000).Wait();
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Extracting custom items...");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
-                    Task.Delay(4000).Wait();
+                    Task.Delay(2000).Wait();
                     CustomItemExtractorWorker.ExtractCustomItemsFromPaths(ItemsAdderDir, Version);
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Finished extracting custom items!");
@@ -65,7 +65,7 @@ namespace BedrockAdder.Library
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Extracting custom blocks...");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
-                    Task.Delay(4000).Wait();
+                    Task.Delay(2000).Wait();
                     CustomBlockExtractorWorker.ExtractCustomBlocksFromPaths(ItemsAdderDir, Version);
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Finished extracting custom blocks!");
@@ -73,7 +73,7 @@ namespace BedrockAdder.Library
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Extracting custom armors...");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
-                    Task.Delay(4000).Wait();
+                    Task.Delay(2000).Wait();
                     CustomArmorExtractorWorker.ExtractCustomArmorsFromPaths(ItemsAdderDir, Version);
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Finished extracting custom armors!");
@@ -81,7 +81,7 @@ namespace BedrockAdder.Library
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Extracting custom furniture...");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
-                    Task.Delay(4000).Wait();
+                    Task.Delay(2000).Wait();
                     CustomFurnitureExtractorWorker.ExtractCustomFurnitureFromPaths(ItemsAdderDir, Version);
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Finished extracting custom furniture!");
@@ -89,7 +89,7 @@ namespace BedrockAdder.Library
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Extracting custom fonts...");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
-                    Task.Delay(4000).Wait();
+                    Task.Delay(2000).Wait();
                     CustomFontExtractorWorker.ExtractCustomFontsFromPaths(ItemsAdderDir, Version);
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Finished extracting custom fonts!");
@@ -97,7 +97,7 @@ namespace BedrockAdder.Library
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Extracting custom sounds...");
                     ConsoleWorker.Write.Line("info", "--------------------------------");
-                    Task.Delay(4000).Wait();
+                    Task.Delay(2000).Wait();
                     CustomSoundExtractorWorker.ExtractCustomSoundsFromPaths(ItemsAdderDir);
                     ConsoleWorker.Write.Line("info", "--------------------------------");
                     ConsoleWorker.Write.Line("info", "Finished extracting custom sounds!");
