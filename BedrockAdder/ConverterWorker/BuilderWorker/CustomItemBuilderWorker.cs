@@ -1,12 +1,13 @@
-﻿using System;
-using System.IO;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+﻿using BedrockAdder.ConverterWorker.ObjectWorker;           // ModelBuilderWorker, ModelImageBuilderWorker, VanillaRecolorerWorker, CustomRecolorerWorker
+using BedrockAdder.FileWorker;                               // CefOffscreenIconRenderer (IModelIconRenderer)
 using BedrockAdder.Library;
 using BedrockAdder.Managers;
-using BedrockAdder.ConverterWorker.ObjectWorker;           // ModelBuilderWorker, ModelImageBuilderWorker, VanillaRecolorerWorker, CustomRecolorerWorker
 using BedrockAdder.Renderer;
-using BedrockAdder.FileWorker;                               // CefOffscreenIconRenderer (IModelIconRenderer)
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System;
+using System.Collections.Generic;
+using System.IO;
 
 namespace BedrockAdder.ConverterWorker.BuilderWorker
 {
@@ -173,6 +174,10 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
                 }
 
                 // --- 3D ICON RENDERING ---
+
+                // 1d) Copy textures used by any 3D state models (graphics.models.*, resource-derived states)
+                // so that pulling/throwing/cast/blocking variants have all their textures available.
+                CopyStateModelTextures(session, it, itemsAdderFolder);
 
                 bool hasModel = !string.IsNullOrWhiteSpace(it.ModelPath) && File.Exists(it.ModelPath);
 
@@ -417,98 +422,137 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
         }
 
         /// <summary>
-        /// For items that define a base 3D model via resource.model_path and use a
-        /// special tool material (BOW, CROSSBOW, SHIELD, FISHING_ROD, TRIDENT),
-        /// automatically derive state models based on ItemsAdder naming conventions.
-        /// 
-        /// Example:
-        ///   base = "frost_spear"
-        ///   TRIDENT → state "throwing" → "frost_spear_throwing.json"
+        /// Copies textures used by 3D state models (graphics.models.*, resource-derived states)
+        /// into the Bedrock pack, so that every state geometry has its textures available.
+        ///
+        /// We reuse the same "textures/models/{ns}/{file}.png" convention
+        /// that ModelBuilderWorker uses for base 3D model textures.
         /// </summary>
-        private static void PopulateResourceStateModels(
-            CustomItem customItem,
-            string itemsAdderFolder,
-            string? itemNamespace,
-            string baseModelName,
-            string itemId)
+        private static void CopyStateModelTextures(PackSession session, CustomItem it, string itemsAdderFolder)
         {
-            if (string.IsNullOrWhiteSpace(itemNamespace))
+            if (it.StateModelPaths == null || it.StateModelPaths.Count == 0)
                 return;
 
-            if (string.IsNullOrWhiteSpace(customItem.Material))
-                return;
+            string ns = it.ItemNamespace ?? "unknown";
+            string id = it.ItemID ?? "unknown";
 
-            string material = customItem.Material.ToUpperInvariant();
+            // Simple de-dupe so we don't spam copy/logs for shared textures.
+            var copied = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            // Make sure we only handle the relevant materials
-            bool isSpecial =
-                material.Contains("BOW") ||
-                material.Contains("CROSSBOW") ||
-                material.Contains("SHIELD") ||
-                material.Contains("FISHING_ROD") ||
-                material.Contains("TRIDENT");
+            foreach (var kv in it.StateModelPaths)
+            {
+                string stateName = kv.Key;
+                string modelPath = kv.Value;
 
-            if (!isSpecial)
-                return;
-
-            string baseName = baseModelName; // already without extension
-            var candidates = new System.Collections.Generic.List<(string state, string modelName)>();
-
-            if (material.Contains("BOW") && !material.Contains("CROSSBOW"))
-            {
-                // BOW: X_pulling_0/1/2
-                candidates.Add(("pulling_0", baseName + "_pulling_0"));
-                candidates.Add(("pulling_1", baseName + "_pulling_1"));
-                candidates.Add(("pulling_2", baseName + "_pulling_2"));
-            }
-            else if (material.Contains("CROSSBOW"))
-            {
-                // CROSSBOW: X_pulling_0/1/2, X_arrow, X_firework
-                candidates.Add(("pulling_0", baseName + "_pulling_0"));
-                candidates.Add(("pulling_1", baseName + "_pulling_1"));
-                candidates.Add(("pulling_2", baseName + "_pulling_2"));
-                candidates.Add(("arrow", baseName + "_arrow"));
-                candidates.Add(("rocket", baseName + "_firework"));
-            }
-            else if (material.Contains("SHIELD"))
-            {
-                // SHIELD: X_blocking
-                candidates.Add(("blocking", baseName + "_blocking"));
-            }
-            else if (material.Contains("FISHING_ROD"))
-            {
-                // FISHING ROD: X_cast
-                candidates.Add(("cast", baseName + "_cast"));
-            }
-            else if (material.Contains("TRIDENT"))
-            {
-                // TRIDENT: X_throwing
-                candidates.Add(("throwing", baseName + "_throwing"));
-            }
-
-            foreach (var (state, modelName) in candidates)
-            {
-                // Don't override explicit graphics.models definitions if present
-                if (customItem.StateModelPaths.ContainsKey(state))
+                if (string.IsNullOrWhiteSpace(stateName) || string.IsNullOrWhiteSpace(modelPath))
                     continue;
 
-                string modelAsset = "assets/" + itemNamespace + "/models/" + modelName + ".json";
+                // Derive a modelName suitable for ResolveModelTextureMapWithParents:
+                //   - if it's an assets/... path, strip "assets/ns/models/" prefix and ".json"
+                //   - if it's an absolute path, look for "/models/" or "\models\" and strip extension
+                string modelName = DeriveModelNameFromPath(modelPath, ns);
+                if (string.IsNullOrWhiteSpace(modelName))
+                    continue;
 
-                if (JsonParserWorker.TryResolveContentAssetAbsolute(itemsAdderFolder, modelAsset, out var modelAbs) &&
-                    File.Exists(modelAbs))
+                var texMap = JsonParserWorker.ResolveModelTextureMapWithParents(itemsAdderFolder, ns, modelName);
+                if (texMap == null || texMap.Count == 0)
+                    continue;
+
+                foreach (var texKv in texMap)
                 {
-                    customItem.StateModelPaths[state] = modelAbs;
-                    ConsoleWorker.Write.Line("info",
-                        itemNamespace + ":" + itemId + " resource-derived state model[" + state + "] → " + modelAbs);
-                }
-                else
-                {
-                    ConsoleWorker.Write.Line("warn",
-                        itemNamespace + ":" + itemId + " missing resource state model " + state + ": " + modelAsset);
+                    string normalizedAsset = texKv.Value;
+                    if (string.IsNullOrWhiteSpace(normalizedAsset))
+                        continue;
+
+                    if (!JsonParserWorker.TryResolveContentAssetAbsolute(itemsAdderFolder, normalizedAsset, out var texAbs, ns) ||
+                        string.IsNullOrWhiteSpace(texAbs) ||
+                        !File.Exists(texAbs))
+                    {
+                        continue;
+                    }
+
+                    string fileName = Path.GetFileName(texAbs);
+                    if (string.IsNullOrWhiteSpace(fileName))
+                        continue;
+
+                    string dstRel = Path.Combine("textures", "models", ns, fileName).Replace('\\', '/');
+                    string dstAbs = Path.Combine(session.PackRoot, dstRel.Replace('/', Path.DirectorySeparatorChar));
+
+                    if (!copied.Add(dstAbs))
+                        continue; // already copied this texture somewhere
+
+                    try
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(dstAbs)!);
+                        File.Copy(texAbs, dstAbs, true);
+                        ConsoleWorker.Write.Line("info",
+                            ns + ":" + id + " state-model texture [" + stateName + ":" + texKv.Key + "] "
+                            + texAbs + " → " + dstRel);
+                    }
+                    catch (Exception ex)
+                    {
+                        ConsoleWorker.Write.Line("warn",
+                            ns + ":" + id + " failed copying state-model texture [" + stateName + ":" + texKv.Key + "]: " + ex.Message);
+                    }
                 }
             }
         }
 
+        /// <summary>
+        /// Derives a modelName (as used in assets/ns/models/{modelName}.json) from either
+        /// an assets/... path or an absolute path on disk.
+        /// Examples:
+        ///   "assets/ranged/models/black_bow_pulling_0.json" → "black_bow_pulling_0"
+        ///   "C:\...\contents\ranged\resourcepack\ranged\models\bows\black_bow_pulling_0.json" → "bows/black_bow_pulling_0"
+        /// </summary>
+        private static string DeriveModelNameFromPath(string modelPath, string itemNamespace)
+        {
+            if (string.IsNullOrWhiteSpace(modelPath))
+                return string.Empty;
+
+            string clean = modelPath.Replace('\\', '/').Trim();
+
+            // Case 1: already "assets/ns/models/..." style
+            if (clean.StartsWith("assets/", StringComparison.OrdinalIgnoreCase))
+            {
+                // Expect: assets/{ns}/models/{rel}.json
+                string withoutAssets = clean.Substring("assets/".Length);
+                int firstSlash = withoutAssets.IndexOf('/');
+                if (firstSlash <= 0)
+                    return string.Empty;
+
+                // ns = before first slash; remainder = "models/...json"
+                string ns = withoutAssets.Substring(0, firstSlash);
+                string rel = withoutAssets.Substring(firstSlash + 1); // models/...json
+
+                // Ensure we're under models/
+                const string modelsPrefix = "models/";
+                if (rel.StartsWith(modelsPrefix, StringComparison.OrdinalIgnoreCase))
+                    rel = rel.Substring(modelsPrefix.Length);
+
+                if (rel.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                    rel = rel.Substring(0, rel.Length - 5);
+
+                return rel; // e.g. "bows/black_bow_pulling_0"
+            }
+
+            // Case 2: absolute path – look for "/models/"
+            int idx = clean.IndexOf("/models/", StringComparison.OrdinalIgnoreCase);
+            if (idx >= 0)
+            {
+                string rel = clean.Substring(idx + "/models/".Length); // e.g. "bows/black_bow_pulling_0.json"
+                if (rel.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                    rel = rel.Substring(0, rel.Length - 5);
+                return rel;
+            }
+
+            // Fallback: just strip directory and extension; treat as flat name
+            string fileName = Path.GetFileName(clean);
+            if (fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                fileName = fileName.Substring(0, fileName.Length - 5);
+
+            return fileName;
+        }
 
         /// <summary>
         /// Copies per-state 2D textures into the Bedrock pack so that multi-state

@@ -47,14 +47,14 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
         {
             if (session == null)
             {
-                Write.Line("error", "AnimationControllerBuilder.BuildControllers: session is null");
+                Write.Line("error", "AnimationControllerBuilderWorker.BuildControllers: session is null");
                 return;
             }
 
             if (_specialItems.Count == 0)
             {
                 // Nothing special detected; no need to write a custom controller file.
-                Write.Line("info", "AnimationControllerBuilder: no special items registered, skipping controller generation.");
+                Write.Line("info", "AnimationControllerBuilderWorker: no special items registered, skipping controller generation.");
                 return;
             }
 
@@ -87,7 +87,7 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
             // If somehow we had no valid materials, bail
             if (!hasBow && !hasCrossbow && !hasShield && !hasFishingRod && !hasTrident)
             {
-                Write.Line("info", "AnimationControllerBuilder: special items list populated, but no recognized tool materials found.");
+                Write.Line("info", "AnimationControllerBuilderWorker: special items list populated, but no recognized tool materials found.");
                 return;
             }
 
@@ -266,11 +266,11 @@ namespace BedrockAdder.ConverterWorker.BuilderWorker
                     displayPath = acAbs;
                 }
 
-                Write.Line("info", "AnimationControllerBuilder → " + displayPath);
+                Write.Line("info", "AnimationControllerBuilderWorker → " + displayPath);
             }
             catch (Exception ex)
             {
-                Write.Line("error", "AnimationControllerBuilder failed to write animation controllers: " + ex.Message);
+                Write.Line("error", "AnimationControllerBuilderWorker failed to write animation controllers: " + ex.Message);
             }
         }
 
